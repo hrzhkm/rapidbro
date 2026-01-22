@@ -16,7 +16,17 @@
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 
+// Connection timeout in milliseconds (10 seconds without data = disconnected)
+#define CONNECTION_TIMEOUT 10000
+
 Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Connection tracking variables
+unsigned long lastPacketTime = 0;
+bool isConnected = false;
+int lastRssi = 0;
+String lastData = "";
+String lastTimestamp = "";
 
 void setup() {
   //initialize Serial Monitor
@@ -75,22 +85,47 @@ void setup() {
   LoRa.setSyncWord(0xF3);
   Serial.println("LoRa Initializing OK!");
   
-  // Show connected status on OLED
+  // Initialize connection tracking
+  lastPacketTime = 0;
+  isConnected = false;
+  
+  // Show waiting status on OLED
   display.clearDisplay();
   display.setCursor(0, 0);
   display.println("LoRa Receiver");
   display.println();
-  display.println("STATUS: CONNECTED");
+  display.println("STATUS: WAITING");
   display.println();
   display.println("Waiting for data...");
   display.display();
 }
 
+// Helper function to parse received data
+// Format: "TIME:HH:MM:SS|DATA:hello X"
+void parseLoRaData(String rawData, String &timestamp, String &data) {
+  int timeStart = rawData.indexOf("TIME:");
+  int dataSeparator = rawData.indexOf("|DATA:");
+  
+  if (timeStart >= 0 && dataSeparator > 0) {
+    // New format with timestamp
+    timestamp = rawData.substring(timeStart + 5, dataSeparator);
+    data = rawData.substring(dataSeparator + 6);
+  } else {
+    // Old format without timestamp (fallback)
+    timestamp = "";
+    data = rawData;
+  }
+}
+
 void loop() {
   // try to parse packet
   int packetSize = LoRa.parsePacket();
+  
   if (packetSize) {
-    // received a packet
+    // received a packet - mark as connected
+    lastPacketTime = millis();
+    isConnected = true;
+    
     Serial.print("Received packet '");
 
     String LoRaData = "";
@@ -100,10 +135,18 @@ void loop() {
       Serial.print(LoRaData); 
     }
 
-    // print RSSI of packet
-    int rssi = LoRa.packetRssi();
+    // Parse the received data to extract timestamp and data
+    String timestamp = "";
+    String data = "";
+    parseLoRaData(LoRaData, timestamp, data);
+    
+    // Store last received data
+    lastData = data;
+    lastTimestamp = timestamp;
+    lastRssi = LoRa.packetRssi();
+    
     Serial.print("' with RSSI ");
-    Serial.println(rssi);
+    Serial.println(lastRssi);
     
     // Display received data on OLED
     display.clearDisplay();
@@ -111,12 +154,45 @@ void loop() {
     display.println("LoRa Receiver");
     display.println("STATUS: CONNECTED");
     display.println("----------------");
+    if (lastTimestamp.length() > 0) {
+      display.print("Time: ");
+      display.println(lastTimestamp);
+    }
     display.print("Data: ");
-    display.println(LoRaData);
-    display.println();
+    display.println(lastData);
     display.print("RSSI: ");
-    display.print(rssi);
+    display.print(lastRssi);
     display.println(" dBm");
     display.display();
+  } else {
+    // No packet received - check for timeout
+    if (lastPacketTime > 0 && (millis() - lastPacketTime) > CONNECTION_TIMEOUT) {
+      // Connection timeout - mark as disconnected
+      if (isConnected) {
+        isConnected = false;
+        Serial.println("LoRa connection lost!");
+      }
+      
+      // Display disconnected status on OLED
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.println("LoRa Receiver");
+      display.println("STATUS: DISCONNECTED");
+      display.println("----------------");
+      if (lastTimestamp.length() > 0) {
+        display.print("Last seen: ");
+        display.println(lastTimestamp);
+      }
+      if (lastData.length() > 0) {
+        display.print("Data: ");
+        display.println(lastData);
+        display.print("RSSI: ");
+        display.print(lastRssi);
+        display.println(" dBm");
+      }
+      display.display();
+      
+      delay(1000);  // Update display every second when disconnected
+    }
   }
 }
