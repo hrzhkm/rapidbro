@@ -16,3 +16,5 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+be/Cargo.lock
