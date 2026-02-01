@@ -142,13 +142,9 @@ async fn get_route_t789() {
                     for value in values {
                         if let Some(encoded_str) = value.as_str() {
                             if let Some(decoded) = decode_bus_data(encoded_str) {
-                                match serde_json::from_str::<Vec<BusPosition>>(&decoded) {
-                                    Ok(buses) => {
-                                        println!("Route T789 - {} buses:", buses.len());
-                                        for bus in &buses {
-                                            println!("  {} @ ({}, {}) speed: {} km/h dir: {:?}", 
-                                                bus.bus_no, bus.latitude, bus.longitude, bus.speed, bus.dir);
-                                        }
+                                match serde_json::from_str::<serde_json::Value>(&decoded) {
+                                    Ok(json) => {
+                                        println!("{}", serde_json::to_string_pretty(&json).unwrap());
                                     }
                                     Err(_) => println!("Decoded: {}", decoded),
                                 }
