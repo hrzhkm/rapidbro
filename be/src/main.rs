@@ -9,8 +9,7 @@ use std::io::Read;
 use std::time::Duration;
 use axum::{routing::get, Json, Router};
 use tower_http::cors::{Any, CorsLayer};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusPosition {
     pub dt_received: Option<String>,
@@ -44,6 +43,7 @@ async fn main() {
     let app = Router::new()
     .route("/gtfs", get(prasarana_gtfs_data))
     .route("/get-all", get(fetch_all_buses))
+    .route("/get-route-t789", get(get_route_t789))
     .layer(cors);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3030")
@@ -55,40 +55,29 @@ async fn main() {
 }
 
 // Fetch all buses - connect without specifying a route to see what we get
-async fn fetch_all_buses() {
-    println!("Connecting to Socket.IO server: {}", SOCKET_URL);
+async fn fetch_all_buses() -> Json<serde_json::Value> {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
-    let on_any = |event: rust_socketio::Event, payload: Payload, _socket: rust_socketio::asynchronous::Client| {
+    let result = Arc::new(Mutex::new(Vec::new()));
+    let result_clone = result.clone();
+
+    let on_any = move |_event: rust_socketio::Event, payload: Payload, _socket: rust_socketio::asynchronous::Client| {
+        let result = result_clone.clone();
         async move {
-            println!("\n=== Event: {:?} ===", event);
             match payload {
                 Payload::Text(values) => {
                     for value in values {
                         if let Some(encoded_str) = value.as_str() {
                             if let Some(decoded) = decode_bus_data(encoded_str) {
-                                // Try to parse as array of bus positions
-                                match serde_json::from_str::<Vec<BusPosition>>(&decoded) {
-                                    Ok(buses) => {
-                                        println!("Received {} buses:", buses.len());
-                                        for bus in &buses {
-                                            println!("  {} - {} @ ({}, {}) speed: {} km/h", 
-                                                bus.route, bus.bus_no, bus.latitude, bus.longitude, bus.speed);
-                                        }
-                                    }
-                                    Err(_) => {
-                                        println!("Decoded: {}", decoded);
-                                    }
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&decoded) {
+                                    result.lock().await.push(json);
                                 }
-                            } else {
-                                println!("Raw: {}", encoded_str);
                             }
-                        } else {
-                            println!("JSON: {}", serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string()));
                         }
                     }
                 }
-                Payload::Binary(bin) => println!("Binary: {} bytes", bin.len()),
-                _ => println!("Other payload"),
+                _ => {}
             }
         }
         .boxed()
@@ -99,80 +88,63 @@ async fn fetch_all_buses() {
         .on_any(on_any)
         .on("connect", |_, socket| {
             async move {
-                println!("Connected! Requesting all buses...");
-                
-                // Empty route to get all buses
                 let payload = json!({
                     "sid": "",
                     "uid": "",
                     "provider": "RKL",
                     "route": ""
                 });
-                
-                println!("Emitting onFts-reload: {}", payload);
-                if let Err(e) = socket.emit("onFts-reload", payload).await {
-                    eprintln!("Failed to emit: {:?}", e);
-                }
+                let _ = socket.emit("onFts-reload", payload).await;
             }
             .boxed()
         })
         .connect()
         .await;
 
-    match socket {
-        Ok(socket) => {
-            println!("Socket connected! Waiting for data...\n");
-            
-            for i in 0..10 {
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                
-                let payload = json!({
-                    "sid": "",
-                    "uid": "",
-                    "provider": "RKL",
-                    "route": ""
-                });
-                
-                println!("\n--- Request #{} ---", i + 1);
-                if let Err(e) = socket.emit("onFts-reload", payload).await {
-                    eprintln!("Failed to emit: {:?}", e);
-                    break;
-                }
-            }
-        }
-        Err(e) => eprintln!("Failed to connect: {:?}", e),
+    if let Ok(socket) = socket {
+        let payload = json!({
+            "sid": "",
+            "uid": "",
+            "provider": "RKL",
+            "route": ""
+        });
+        let _ = socket.emit("onFts-reload", payload).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+
+    let data = result.lock().await;
+    println!("Calling fetch_all_buses");
+    if data.len() == 1 {
+        Json(data[0].clone())
+    } else {
+        Json(json!(data.clone()))
     }
 }
 
 // Get buses for route T789 specifically
-#[allow(dead_code)]
-async fn get_route_t789() {
-    println!("Connecting to Socket.IO server: {}", SOCKET_URL);
+async fn get_route_t789() -> Json<serde_json::Value> {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
-    let on_any = |event: rust_socketio::Event, payload: Payload, _socket: rust_socketio::asynchronous::Client| {
+    let result = Arc::new(Mutex::new(Vec::new()));
+    let result_clone = result.clone();
+
+    let on_any = move |_event: rust_socketio::Event, payload: Payload, _socket: rust_socketio::asynchronous::Client| {
+        let result = result_clone.clone();
         async move {
-            println!("\n=== Event: {:?} ===", event);
             match payload {
                 Payload::Text(values) => {
                     for value in values {
                         if let Some(encoded_str) = value.as_str() {
                             if let Some(decoded) = decode_bus_data(encoded_str) {
-                                match serde_json::from_str::<serde_json::Value>(&decoded) {
-                                    Ok(json) => {
-                                        println!("{}", serde_json::to_string_pretty(&json).unwrap());
-                                    }
-                                    Err(_) => println!("Decoded: {}", decoded),
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&decoded) {
+                                    result.lock().await.push(json);
                                 }
-                            } else {
-                                println!("Raw: {}", encoded_str);
                             }
-                        } else {
-                            println!("JSON: {}", serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string()));
                         }
                     }
                 }
-                Payload::Binary(bin) => println!("Binary: {} bytes", bin.len()),
-                _ => println!("Other payload"),
+                _ => {}
             }
         }
         .boxed()
@@ -183,47 +155,36 @@ async fn get_route_t789() {
         .on_any(on_any)
         .on("connect", |_, socket| {
             async move {
-                println!("Connected! Requesting T789 buses...");
-                
                 let payload = json!({
                     "sid": "",
                     "uid": "",
                     "provider": "RKL",
                     "route": "T789"
                 });
-                
-                println!("Emitting onFts-reload: {}", payload);
-                if let Err(e) = socket.emit("onFts-reload", payload).await {
-                    eprintln!("Failed to emit: {:?}", e);
-                }
+                let _ = socket.emit("onFts-reload", payload).await;
             }
             .boxed()
         })
         .connect()
         .await;
 
-    match socket {
-        Ok(socket) => {
-            println!("Socket connected! Waiting for T789 data...\n");
-            
-            for i in 0..10 {
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                
-                let payload = json!({
-                    "sid": "",
-                    "uid": "",
-                    "provider": "RKL",
-                    "route": "T789"
-                });
-                
-                println!("\n--- Request #{} ---", i + 1);
-                if let Err(e) = socket.emit("onFts-reload", payload).await {
-                    eprintln!("Failed to emit: {:?}", e);
-                    break;
-                }
-            }
-        }
-        Err(e) => eprintln!("Failed to connect: {:?}", e),
+    if let Ok(socket) = socket {
+        let payload = json!({
+            "sid": "",
+            "uid": "",
+            "provider": "RKL",
+            "route": "T789"
+        });
+        let _ = socket.emit("onFts-reload", payload).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+
+    let data = result.lock().await;
+    println!("Calling get_route_t789");
+    if data.len() == 1 {
+        Json(data[0].clone())
+    } else {
+        Json(json!(data.clone()))
     }
 }
 
@@ -249,13 +210,6 @@ async fn prasarana_gtfs_data() -> Json<gtfs_realtime::FeedMessage> {
     let body = response.bytes().await.unwrap();
     let feed = gtfs_realtime::FeedMessage::decode(body).unwrap();
 
-    // Convert entire feed to JSON
-    // match serde_json::to_string_pretty(&feed) {
-    //     Ok(json) => println!("{}", json),
-    //     Err(e) => {
-    //         eprintln!("Failed to serialize to JSON: {:?}", e);
-    //         println!("GTFS Feed (debug): {:?}", feed);
-    //     }
-    // }
+    println!("Calling prasarana_gtfs_data");
     Json(feed)
 }
