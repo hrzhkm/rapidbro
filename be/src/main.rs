@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::io::Read;
 use std::time::Duration;
-use axum::{routing::get, Json,Router};
-
+use axum::{routing::get, Json, Router};
+use tower_http::cors::{Any, CorsLayer};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusPosition {
     pub dt_received: Option<String>,
@@ -33,13 +35,23 @@ const SOCKET_URL: &str = "https://rapidbus-socketio-avl.prasarana.com.my";
 
 #[tokio::main]
 async fn main() {
-    // Get all buses (no route filter)
-    // fetch_all_buses().await;
-    
-    // Or get specific route:
-    // get_route_t789().await;
 
-    prasarana_gtfs_data().await;
+    let cors = CorsLayer::new()
+    .allow_origin(Any)
+    .allow_methods(Any)
+    .allow_headers(Any);
+
+    let app = Router::new()
+    .route("/gtfs", get(prasarana_gtfs_data))
+    .route("/get-all", get(fetch_all_buses))
+    .layer(cors);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030")
+    .await
+    .unwrap();
+
+    println!("Server is running on http://localhost:3030");
+    axum::serve(listener, app).await.unwrap();
 }
 
 // Fetch all buses - connect without specifying a route to see what we get
@@ -230,7 +242,7 @@ fn decode_bus_data(encoded: &str) -> Option<String> {
 
 // Data OpenDOSM Prasarana - uses protobuf (alternative data source)
 #[allow(dead_code)]
-async fn prasarana_gtfs_data() {
+async fn prasarana_gtfs_data() -> Json<gtfs_realtime::FeedMessage> {
     let endpoint =
         "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-kl";
     let response = reqwest::get(endpoint).await.unwrap();
@@ -238,11 +250,12 @@ async fn prasarana_gtfs_data() {
     let feed = gtfs_realtime::FeedMessage::decode(body).unwrap();
 
     // Convert entire feed to JSON
-    match serde_json::to_string_pretty(&feed) {
-        Ok(json) => println!("{}", json),
-        Err(e) => {
-            eprintln!("Failed to serialize to JSON: {:?}", e);
-            println!("GTFS Feed (debug): {:?}", feed);
-        }
-    }
+    // match serde_json::to_string_pretty(&feed) {
+    //     Ok(json) => println!("{}", json),
+    //     Err(e) => {
+    //         eprintln!("Failed to serialize to JSON: {:?}", e);
+    //         println!("GTFS Feed (debug): {:?}", feed);
+    //     }
+    // }
+    Json(feed)
 }
