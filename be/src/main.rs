@@ -102,6 +102,19 @@ struct ErrorResponse {
     error: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct BusEta {
+    bus_no: String,
+    current_lat: f64,
+    current_lon: f64,
+    current_stop_id: String,
+    current_sequence: u32,
+    stops_away: u32,
+    distance_km: f64,
+    speed_kmh: f64,
+    eta_minutes: f64,
+}
+
 const SOCKET_URL: &str = "https://rapidbus-socketio-avl.prasarana.com.my";
 const GTFS_DATA_PATH: &str = "../rapid_kl_data";
 
@@ -117,6 +130,7 @@ async fn main() {
     .route("/gtfs", get(prasarana_gtfs_data))
     .route("/get-all", get(fetch_all_buses))
     .route("/get-route-t789", get(get_route_t789))
+    .route("/get-t789-eta", get(get_t789_eta))
     .route("/route/{route_id}/stops", get(get_route_stops))
     .layer(cors);
 
@@ -262,6 +276,187 @@ async fn get_route_t789() -> Json<serde_json::Value> {
     }
 }
 
+// Calculate ETA for T789 buses to reach stop 1000838 (KL1397 FLAT PKNS KERINCHI/KL GATEWAY)
+async fn get_t789_eta() -> Result<Json<Vec<BusEta>>, (StatusCode, Json<ErrorResponse>)> {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    const TARGET_STOP_ID: &str = "1000838";
+    const DEFAULT_SPEED_KMH: f64 = 20.0;
+
+    // --- Step 1: Fetch live bus positions via websocket (same as get_route_t789) ---
+    let result = Arc::new(Mutex::new(Vec::new()));
+    let result_clone = result.clone();
+
+    let on_any = move |_event: rust_socketio::Event, payload: Payload, _socket: rust_socketio::asynchronous::Client| {
+        let result = result_clone.clone();
+        async move {
+            match payload {
+                Payload::Text(values) => {
+                    for value in values {
+                        if let Some(encoded_str) = value.as_str() {
+                            if let Some(decoded) = decode_bus_data(encoded_str) {
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&decoded) {
+                                    result.lock().await.push(json);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        .boxed()
+    };
+
+    let socket = ClientBuilder::new(SOCKET_URL)
+        .transport_type(TransportType::Websocket)
+        .on_any(on_any)
+        .on("connect", |_, socket| {
+            async move {
+                let payload = json!({
+                    "sid": "",
+                    "uid": "",
+                    "provider": "RKL",
+                    "route": "T789"
+                });
+                let _ = socket.emit("onFts-reload", payload).await;
+            }
+            .boxed()
+        })
+        .connect()
+        .await;
+
+    if let Ok(socket) = socket {
+        let payload = json!({
+            "sid": "",
+            "uid": "",
+            "provider": "RKL",
+            "route": "T789"
+        });
+        let _ = socket.emit("onFts-reload", payload).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+
+    let raw_data = result.lock().await;
+
+    // Parse bus positions from the raw JSON
+    let mut buses: Vec<BusPosition> = Vec::new();
+    for value in raw_data.iter() {
+        // The data may come as a single object or an array
+        if let Ok(bus) = serde_json::from_value::<BusPosition>(value.clone()) {
+            buses.push(bus);
+        } else if let Some(arr) = value.as_array() {
+            for item in arr {
+                if let Ok(bus) = serde_json::from_value::<BusPosition>(item.clone()) {
+                    buses.push(bus);
+                }
+            }
+        }
+    }
+
+    // --- Step 2: Load route stops for T7890 from GTFS data ---
+    let routes = load_routes().map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Failed to load routes: {}", e),
+        }))
+    })?;
+
+    let trips_by_route = load_trips().map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Failed to load trips: {}", e),
+        }))
+    })?;
+
+    let stop_times_by_trip = load_stop_times().map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Failed to load stop times: {}", e),
+        }))
+    })?;
+
+    let stops_map = load_stops().map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Failed to load stops: {}", e),
+        }))
+    })?;
+
+    let route_stops = get_stops_by_route("T7890", &routes, &trips_by_route, &stop_times_by_trip, &stops_map)
+        .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
+
+    // Find the target stop's sequence
+    let target_stop = route_stops.stops.iter()
+        .find(|s| s.stop_id == TARGET_STOP_ID)
+        .ok_or_else(|| {
+            (StatusCode::NOT_FOUND, Json(ErrorResponse {
+                error: format!("Target stop '{}' not found in route stops", TARGET_STOP_ID),
+            }))
+        })?;
+    let target_sequence = target_stop.sequence;
+
+    // --- Step 3: Calculate ETA for each bus ---
+    let mut eta_results: Vec<BusEta> = Vec::new();
+
+    for bus in &buses {
+        let bus_stop_id = match &bus.busstop_id {
+            Some(id) if !id.is_empty() => id.clone(),
+            _ => continue, // Skip buses without a known stop
+        };
+
+        // Find the bus's current stop in the route sequence
+        let current_stop = match route_stops.stops.iter().find(|s| s.stop_id == bus_stop_id) {
+            Some(stop) => stop,
+            None => continue, // Bus is at a stop not on this route, skip
+        };
+
+        let current_sequence = current_stop.sequence;
+
+        // Skip buses that have already passed the target stop
+        if current_sequence >= target_sequence {
+            continue;
+        }
+
+        let stops_away = target_sequence - current_sequence;
+
+        // Calculate distance: bus position -> next stops -> ... -> target stop
+        // Get the stops between current and target (exclusive of current, inclusive of target)
+        let intermediate_stops: Vec<&StopWithDetails> = route_stops.stops.iter()
+            .filter(|s| s.sequence > current_sequence && s.sequence <= target_sequence)
+            .collect();
+
+        let mut total_distance_km = 0.0;
+        let mut prev_lat = bus.latitude;
+        let mut prev_lon = bus.longitude;
+
+        for stop in &intermediate_stops {
+            total_distance_km += haversine_distance(prev_lat, prev_lon, stop.stop_lat, stop.stop_lon);
+            prev_lat = stop.stop_lat;
+            prev_lon = stop.stop_lon;
+        }
+
+        // Calculate ETA: use bus speed if available, otherwise fallback
+        let speed = if bus.speed > 0.0 { bus.speed } else { DEFAULT_SPEED_KMH };
+        let eta_minutes = (total_distance_km / speed) * 60.0;
+
+        eta_results.push(BusEta {
+            bus_no: bus.bus_no.clone(),
+            current_lat: bus.latitude,
+            current_lon: bus.longitude,
+            current_stop_id: bus_stop_id,
+            current_sequence,
+            stops_away,
+            distance_km: (total_distance_km * 100.0).round() / 100.0,
+            speed_kmh: bus.speed,
+            eta_minutes: (eta_minutes * 10.0).round() / 10.0,
+        });
+    }
+
+    // Sort by ETA (closest first)
+    eta_results.sort_by(|a, b| a.eta_minutes.partial_cmp(&b.eta_minutes).unwrap_or(std::cmp::Ordering::Equal));
+
+    println!("Calling get_t789_eta: found {} buses with ETA", eta_results.len());
+    Ok(Json(eta_results))
+}
+
 // Decode base64 + gzip compressed data from the websocket
 fn decode_bus_data(encoded: &str) -> Option<String> {
     let decoded = base64::engine::general_purpose::STANDARD
@@ -273,6 +468,17 @@ fn decode_bus_data(encoded: &str) -> Option<String> {
     decoder.read_to_string(&mut decompressed).ok()?;
 
     Some(decompressed)
+}
+
+// Calculate haversine distance between two GPS coordinates (returns km)
+fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let r = 6371.0; // Earth radius in km
+    let dlat = (lat2 - lat1).to_radians();
+    let dlon = (lon2 - lon1).to_radians();
+    let a = (dlat / 2.0).sin().powi(2)
+        + lat1.to_radians().cos() * lat2.to_radians().cos() * (dlon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().asin();
+    r * c
 }
 
 // Data OpenDOSM Prasarana - uses protobuf (alternative data source)
