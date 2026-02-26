@@ -25,7 +25,7 @@ services:
     depends_on:
       - be
     ports:
-      - "3000:3000"
+      - "3031:3000"
 
 volumes:
   redis_data:
