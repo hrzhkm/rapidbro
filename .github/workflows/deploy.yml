@@ -1,0 +1,78 @@
+name: Build And Deploy (Self-Hosted)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  build_and_push:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build and push backend image
+        env:
+          OWNER: ${{ github.repository_owner }}
+          TAG: ${{ github.sha }}
+        run: |
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          BE_IMAGE="ghcr.io/${OWNER_LC}/rapidbro-be"
+          docker build -f be/Dockerfile -t "${BE_IMAGE}:${TAG}" -t "${BE_IMAGE}:latest" .
+          docker push "${BE_IMAGE}:${TAG}"
+          docker push "${BE_IMAGE}:latest"
+
+      - name: Build and push frontend image
+        env:
+          OWNER: ${{ github.repository_owner }}
+          TAG: ${{ github.sha }}
+          BE_PUBLIC_URL: ${{ vars.BE_PUBLIC_URL }}
+        run: |
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          FE_IMAGE="ghcr.io/${OWNER_LC}/rapidbro-fe"
+          PUBLIC_BE_URL="${BE_PUBLIC_URL:-http://localhost:3030}"
+          docker build -f fe/Dockerfile --build-arg VITE_BE_URL="${PUBLIC_BE_URL}" -t "${FE_IMAGE}:${TAG}" -t "${FE_IMAGE}:latest" .
+          docker push "${FE_IMAGE}:${TAG}"
+          docker push "${FE_IMAGE}:latest"
+
+  deploy:
+    runs-on: self-hosted
+    needs: build_and_push
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Pull and deploy stack
+        env:
+          OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          export GHCR_NAMESPACE="ghcr.io/${OWNER_LC}"
+          export IMAGE_TAG
+          docker compose -f docker-compose.deploy.yml pull
+          docker compose -f docker-compose.deploy.yml up -d --remove-orphans

@@ -1,0 +1,31 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  be:
+    image: ${GHCR_NAMESPACE}/rapidbro-be:${IMAGE_TAG}
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      REDIS_URL: redis://redis:6379/
+      BUS_TTL_SECONDS: "120"
+      STALE_AFTER_SECONDS: "20"
+    ports:
+      - "3030:3030"
+
+  fe:
+    image: ${GHCR_NAMESPACE}/rapidbro-fe:${IMAGE_TAG}
+    restart: unless-stopped
+    depends_on:
+      - be
+    ports:
+      - "3000:3000"
+
+volumes:
+  redis_data:
