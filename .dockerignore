@@ -1,0 +1,12 @@
+.git
+.gitignore
+.DS_Store
+
+**/node_modules
+be/target
+fe/.output
+fe/.nitro
+fe/.tanstack
+fe/.turbo
+
+dump.rdb
