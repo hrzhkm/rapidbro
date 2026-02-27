@@ -118,6 +118,19 @@ struct NearestStopResponse {
     distance_meters: f64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct StopRouteSummary {
+    route_id: String,
+    route_short_name: String,
+    route_long_name: String,
+}
+
+#[derive(Debug, Serialize)]
+struct StopRoutesResponse {
+    stop_id: String,
+    routes: Vec<StopRouteSummary>,
+}
+
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
     error: String,
@@ -257,6 +270,7 @@ async fn main() {
         .route("/get-t789-eta", get(get_t789_eta))
         .route("/route/{route_id}/eta/{stop_id}", get(get_route_eta))
         .route("/stops/{stop_id}/eta", get(get_stop_eta))
+        .route("/stops/{stop_id}/routes", get(get_stop_routes))
         .route("/route/{route_id}/stops", get(get_route_stops))
         .route("/stops/nearest", get(get_nearest_stop))
         .layer(cors)
@@ -793,6 +807,28 @@ async fn get_stop_eta(
     Ok(Json(all_eta_results))
 }
 
+async fn get_stop_routes(
+    Path(stop_id): Path<String>,
+) -> Result<Json<StopRoutesResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let gtfs = load_gtfs_context()?;
+    let routes = get_routes_for_stop(
+        &stop_id,
+        &gtfs.routes,
+        &gtfs.trips_by_route,
+        &gtfs.stop_times_by_trip,
+        &gtfs.stops_map,
+    )
+    .map_err(|(status, message)| (status, Json(ErrorResponse { error: message })))?;
+
+    println!(
+        "Calling get_stop_routes for stop_id={}: {} routes",
+        stop_id,
+        routes.len()
+    );
+
+    Ok(Json(StopRoutesResponse { stop_id, routes }))
+}
+
 async fn calculate_route_eta(
     state: &AppState,
     route_id: &str,
@@ -952,6 +988,60 @@ fn load_gtfs_context() -> Result<GtfsContext, (StatusCode, Json<ErrorResponse>)>
         stop_times_by_trip,
         stops_map,
     })
+}
+
+fn get_routes_for_stop(
+    stop_id: &str,
+    routes: &[Route],
+    trips_by_route: &HashMap<String, Vec<Trip>>,
+    stop_times_by_trip: &HashMap<String, Vec<StopTime>>,
+    stops_map: &HashMap<String, Stop>,
+) -> Result<Vec<StopRouteSummary>, (StatusCode, String)> {
+    if !stops_map.contains_key(stop_id) {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("Stop '{}' not found", stop_id),
+        ));
+    }
+
+    let mut stop_routes: Vec<StopRouteSummary> = routes
+        .iter()
+        .filter_map(|route| {
+            let route_stops = get_stops_by_route(
+                &route.route_id,
+                routes,
+                trips_by_route,
+                stop_times_by_trip,
+                stops_map,
+            )
+            .ok()?;
+
+            route_stops
+                .stops
+                .iter()
+                .any(|stop| stop.stop_id == stop_id)
+                .then(|| StopRouteSummary {
+                    route_id: route.route_id.clone(),
+                    route_short_name: route.route_short_name.clone(),
+                    route_long_name: route.route_long_name.clone(),
+                })
+        })
+        .collect();
+
+    stop_routes.sort_by(|a, b| {
+        a.route_short_name
+            .cmp(&b.route_short_name)
+            .then(a.route_id.cmp(&b.route_id))
+    });
+
+    if stop_routes.is_empty() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("No routes found for stop '{}'", stop_id),
+        ));
+    }
+
+    Ok(stop_routes)
 }
 
 // Decode base64 + gzip compressed data from the websocket
