@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, LoaderCircle, LocateFixed, MapPin } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,8 +13,6 @@ import {
 import { Dialog } from '@/components/ui/dialog'
 
 export const Route = createFileRoute('/')({ component: App })
-
-let hasAutoRequestedNearestStop = false
 
 type NearestStopResponse = {
   stop_id: string
@@ -76,6 +74,7 @@ function App() {
     () => import.meta.env.VITE_BE_URL ?? 'http://localhost:3030',
     [],
   )
+  const hasAutoRequestedNearestStopRef = useRef(false)
   const [coords, setCoords] = useState<UserCoords | null>(null)
   const [nearestStop, setNearestStop] = useState<NearestStopResponse | null>(
     null,
@@ -90,6 +89,7 @@ function App() {
   const [isLoadingEta, setIsLoadingEta] = useState(false)
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false)
   const [isLoadingSelectedRoute, setIsLoadingSelectedRoute] = useState(false)
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [etaErrorMessage, setEtaErrorMessage] = useState<string | null>(null)
   const [routeErrorMessage, setRouteErrorMessage] = useState<string | null>(
@@ -275,6 +275,7 @@ function App() {
             fetchEtaToStop(nearestStopData.stop_id),
             fetchRoutesForStop(nearestStopData.stop_id),
           ])
+          setLastFetchedAt(new Date())
         } catch (error) {
           setErrorMessage(
             error instanceof Error
@@ -298,12 +299,20 @@ function App() {
   }
 
   useEffect(() => {
-    if (hasAutoRequestedNearestStop) {
+    if (hasAutoRequestedNearestStopRef.current) {
       return
     }
 
-    hasAutoRequestedNearestStop = true
+    hasAutoRequestedNearestStopRef.current = true
     handleFindNearestStop()
+  }, [])
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      handleFindNearestStop()
+    }, 30000)
+
+    return () => window.clearInterval(id)
   }, [])
 
   return (
@@ -317,23 +326,30 @@ function App() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button
-            type="button"
-            onClick={handleFindNearestStop}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <LoaderCircle className="animate-spin" />
-                Finding...
-              </>
-            ) : (
-              <>
-                <LocateFixed />
-                {coords ? 'Refresh nearest stop' : 'Find nearest stop'}
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              onClick={handleFindNearestStop}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <LoaderCircle className="animate-spin" />
+                  Finding...
+                </>
+              ) : (
+                <>
+                  <LocateFixed />
+                  {coords ? 'Refresh nearest stop' : 'Find nearest stop'}
+                </>
+              )}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              {lastFetchedAt
+                ? `Last fetched: ${lastFetchedAt.toLocaleTimeString()}`
+                : 'No fetch yet'}
+            </p>
+          </div>
 
           {errorMessage ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
