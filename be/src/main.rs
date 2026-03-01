@@ -136,6 +136,21 @@ struct ErrorResponse {
     error: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum StopResolutionSource {
+    Live,
+    Derived,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedCurrentStop {
+    stop_id: String,
+    stop_name: String,
+    sequence: u32,
+    source: StopResolutionSource,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct BusEta {
     route_id: String,
@@ -143,7 +158,9 @@ struct BusEta {
     current_lat: f64,
     current_lon: f64,
     current_stop_id: String,
+    current_stop_name: String,
     current_sequence: u32,
+    stop_resolution_source: StopResolutionSource,
     stops_away: u32,
     distance_km: f64,
     speed_kmh: f64,
@@ -182,6 +199,16 @@ struct GetAllMeta {
 struct GetAllResponse {
     data: Vec<BusPosition>,
     meta: GetAllMeta,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RouteBusPositionResponse {
+    #[serde(flatten)]
+    bus: BusPosition,
+    resolved_stop_id: Option<String>,
+    resolved_stop_name: Option<String>,
+    resolved_stop_sequence: Option<u32>,
+    stop_resolution_source: Option<StopResolutionSource>,
 }
 
 #[derive(Debug, Serialize)]
@@ -226,6 +253,7 @@ const REDIS_INGEST_LAST_KEY: &str = "rapidbro:ingestor:last_ingest_at";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1:6379/";
 const DEFAULT_BUS_TTL_SECONDS: i64 = 120;
 const DEFAULT_STALE_AFTER_SECONDS: i64 = 20;
+const MAX_DERIVED_STOP_DISTANCE_KM: f64 = 0.75;
 const PANTAI_HILLPARK_PHASE_5_STOP_ID: &str = "1008485";
 
 #[tokio::main]
@@ -725,10 +753,29 @@ async fn get_route_t789(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(&state).await?;
-    let t789_buses: Vec<BusPosition> = snapshot
+    let gtfs = load_gtfs_context()?;
+    let route_stops = get_stops_by_route(
+        "T7890",
+        &gtfs.routes,
+        &gtfs.trips_by_route,
+        &gtfs.stop_times_by_trip,
+        &gtfs.stops_map,
+    )
+    .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
+    let t789_buses: Vec<RouteBusPositionResponse> = snapshot
         .buses
         .into_iter()
         .filter(|bus| is_t789_route(&bus.route))
+        .map(|bus| {
+            let resolved_stop = resolve_current_stop(&bus, &route_stops);
+            RouteBusPositionResponse {
+                resolved_stop_id: resolved_stop.as_ref().map(|stop| stop.stop_id.clone()),
+                resolved_stop_name: resolved_stop.as_ref().map(|stop| stop.stop_name.clone()),
+                resolved_stop_sequence: resolved_stop.as_ref().map(|stop| stop.sequence),
+                stop_resolution_source: resolved_stop.map(|stop| stop.source),
+                bus,
+            }
+        })
         .collect();
 
     println!(
@@ -913,6 +960,52 @@ fn calculate_stop_eta_from_snapshot(
     all_eta_results
 }
 
+fn resolve_current_stop(
+    bus: &BusPosition,
+    route_stops: &RouteStopsResponse,
+) -> Option<ResolvedCurrentStop> {
+    if let Some(bus_stop_id) = bus.busstop_id.as_ref().filter(|id| !id.is_empty()) {
+        if let Some(stop) = route_stops
+            .stops
+            .iter()
+            .find(|stop| stop.stop_id == *bus_stop_id)
+        {
+            return Some(ResolvedCurrentStop {
+                stop_id: stop.stop_id.clone(),
+                stop_name: stop.stop_name.clone(),
+                sequence: stop.sequence,
+                source: StopResolutionSource::Live,
+            });
+        }
+    }
+
+    let nearest_stop = route_stops.stops.iter().min_by(|a, b| {
+        let distance_a = haversine_distance(bus.latitude, bus.longitude, a.stop_lat, a.stop_lon);
+        let distance_b = haversine_distance(bus.latitude, bus.longitude, b.stop_lat, b.stop_lon);
+        distance_a
+            .partial_cmp(&distance_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })?;
+
+    let distance_km = haversine_distance(
+        bus.latitude,
+        bus.longitude,
+        nearest_stop.stop_lat,
+        nearest_stop.stop_lon,
+    );
+
+    if distance_km > MAX_DERIVED_STOP_DISTANCE_KM {
+        return None;
+    }
+
+    Some(ResolvedCurrentStop {
+        stop_id: nearest_stop.stop_id.clone(),
+        stop_name: nearest_stop.stop_name.clone(),
+        sequence: nearest_stop.sequence,
+        source: StopResolutionSource::Derived,
+    })
+}
+
 async fn calculate_route_eta(
     state: &AppState,
     route_id: &str,
@@ -965,17 +1058,12 @@ fn calculate_route_eta_from_stops(
         .iter()
         .filter(|bus| is_bus_on_route(&bus.route, route_id))
     {
-        let bus_stop_id = match &bus.busstop_id {
-            Some(id) if !id.is_empty() => id.clone(),
-            _ => continue,
-        };
-
-        let current_stop = match route_stops.stops.iter().find(|s| s.stop_id == bus_stop_id) {
+        let resolved_stop = match resolve_current_stop(bus, route_stops) {
             Some(stop) => stop,
             None => continue,
         };
 
-        let current_sequence = current_stop.sequence;
+        let current_sequence = resolved_stop.sequence;
         if current_sequence >= target_sequence {
             continue;
         }
@@ -1011,8 +1099,10 @@ fn calculate_route_eta_from_stops(
             bus_no: bus.bus_no.clone(),
             current_lat: bus.latitude,
             current_lon: bus.longitude,
-            current_stop_id: bus_stop_id,
+            current_stop_id: resolved_stop.stop_id,
+            current_stop_name: resolved_stop.stop_name,
             current_sequence,
+            stop_resolution_source: resolved_stop.source,
             stops_away,
             distance_km: (total_distance_km * 100.0).round() / 100.0,
             speed_kmh: bus.speed,

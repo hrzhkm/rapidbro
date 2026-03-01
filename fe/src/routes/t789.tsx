@@ -23,13 +23,19 @@ type T789Bus = {
   longitude: number
   speed: number
   busstop_id?: string | null
+  resolved_stop_id?: string | null
+  resolved_stop_name?: string | null
+  resolved_stop_sequence?: number | null
+  stop_resolution_source?: 'live' | 'derived' | null
 }
 
 type BusEta = {
   route_id?: string
   bus_no: string
   current_stop_id: string
+  current_stop_name: string
   current_sequence?: number
+  stop_resolution_source: 'live' | 'derived'
   stops_away: number
   distance_km: number
   speed_kmh: number
@@ -77,8 +83,12 @@ function T789Page() {
       : etas.find((eta) => eta.bus_no === selectedBusNo) ?? null
   const targetStopName = stopNameById[targetStopId] || 'KL Gateway'
   const selectedCurrentStopId =
-    selectedActiveBus?.busstop_id ?? selectedEta?.current_stop_id ?? null
+    selectedActiveBus?.resolved_stop_id ??
+    selectedActiveBus?.busstop_id ??
+    selectedEta?.current_stop_id ??
+    null
   const selectedCurrentSequence =
+    selectedActiveBus?.resolved_stop_sequence ??
     routeStops?.stops.find((stop) => stop.stop_id === selectedCurrentStopId)
       ?.sequence ??
     selectedEta?.current_sequence ??
@@ -264,10 +274,17 @@ function T789Page() {
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Current stop:{' '}
-                      {bus.busstop_id
-                        ? stopNameById[bus.busstop_id] || bus.busstop_id
-                        : 'Unknown'}
+                      {bus.resolved_stop_name ??
+                        (bus.busstop_id
+                          ? stopNameById[bus.busstop_id] || bus.busstop_id
+                          : bus.resolved_stop_id) ??
+                        'Unknown'}
                     </p>
+                    {bus.stop_resolution_source === 'derived' ? (
+                      <p className="text-sm text-muted-foreground">
+                        Estimated from GPS
+                      </p>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -303,8 +320,13 @@ function T789Page() {
                       stops away · {eta.distance_km.toFixed(2)} km
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Current stop:{' '}
-                      {stopNameById[eta.current_stop_id] || eta.current_stop_id}
+                      Current stop: {eta.current_stop_name}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Stop ID: {eta.current_stop_id}
+                      {eta.stop_resolution_source === 'derived'
+                        ? ' · Estimated from GPS'
+                        : ''}
                     </p>
                   </button>
                 ))}
@@ -340,6 +362,12 @@ function T789Page() {
                 <p className="text-muted-foreground">
                   {selectedEta.stops_away} stops away ·{' '}
                   {selectedEta.distance_km.toFixed(2)} km remaining
+                </p>
+                <p className="text-muted-foreground">
+                  Current stop: {selectedEta.current_stop_name}
+                  {selectedEta.stop_resolution_source === 'derived'
+                    ? ' · Estimated from GPS'
+                    : ''}
                 </p>
               </div>
             ) : (

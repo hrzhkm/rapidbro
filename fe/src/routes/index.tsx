@@ -30,7 +30,9 @@ type BusEta = {
   current_lat: number
   current_lon: number
   current_stop_id: string
+  current_stop_name: string
   current_sequence: number
+  stop_resolution_source: 'live' | 'derived'
   stops_away: number
   distance_km: number
   speed_kmh: number
@@ -482,7 +484,13 @@ function App() {
                           stops away · {eta.distance_km.toFixed(2)} km
                         </p>
                         <p className="text-muted-foreground">
-                          Current stop ID: {eta.current_stop_id}
+                          Current stop: {eta.current_stop_name}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Stop ID: {eta.current_stop_id}
+                          {eta.stop_resolution_source === 'derived'
+                            ? ' · Estimated from GPS'
+                            : ''}
                         </p>
                       </button>
                     ))}
@@ -528,7 +536,13 @@ function App() {
                 {selectedBus.distance_km.toFixed(2)} km remaining
               </p>
               <p className="text-muted-foreground">
-                Current stop ID: {selectedBus.current_stop_id}
+                Current stop: {selectedBus.current_stop_name}
+              </p>
+              <p className="text-muted-foreground">
+                Stop ID: {selectedBus.current_stop_id}
+                {selectedBus.stop_resolution_source === 'derived'
+                  ? ' · Estimated from GPS'
+                  : ''}
               </p>
             </div>
 
