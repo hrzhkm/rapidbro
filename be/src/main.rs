@@ -231,9 +231,17 @@ struct StopIncomingResponse {
     meta: StopIncomingMeta,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BusMotionState {
+    reference_lat: f64,
+    reference_lon: f64,
+    stationary_since_unix_ms: Option<i64>,
+}
+
 #[derive(Debug)]
 struct RedisBusSnapshot {
     buses: Vec<BusPosition>,
+    motion_states: HashMap<String, BusMotionState>,
     active_bus_count: usize,
     last_ingest_at_unix_ms: Option<i64>,
 }
@@ -249,11 +257,15 @@ const SOCKET_URL: &str = "https://rapidbus-socketio-avl.prasarana.com.my";
 const GTFS_DATA_PATH: &str = "../rapid_kl_data";
 const REDIS_BUSES_LATEST_KEY: &str = "rapidbro:buses:latest";
 const REDIS_BUSES_LAST_SEEN_KEY: &str = "rapidbro:buses:last_seen";
+const REDIS_BUSES_MOTION_KEY: &str = "rapidbro:buses:motion";
 const REDIS_INGEST_LAST_KEY: &str = "rapidbro:ingestor:last_ingest_at";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1:6379/";
 const DEFAULT_BUS_TTL_SECONDS: i64 = 120;
 const DEFAULT_STALE_AFTER_SECONDS: i64 = 20;
 const MAX_DERIVED_STOP_DISTANCE_KM: f64 = 0.75;
+const STATIONARY_SPEED_THRESHOLD_KMH: f64 = 1.0;
+const STATIONARY_DISTANCE_THRESHOLD_KM: f64 = 0.03;
+const STATIONARY_WINDOW_MS: i64 = 60_000;
 const PANTAI_HILLPARK_PHASE_5_STOP_ID: &str = "1008485";
 
 #[tokio::main]
@@ -387,6 +399,11 @@ async fn load_active_bus_snapshot(
             .arg(&stale_bus_ids)
             .ignore();
         delete_pipe
+            .cmd("HDEL")
+            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(&stale_bus_ids)
+            .ignore();
+        delete_pipe
             .cmd("ZREMRANGEBYSCORE")
             .arg(REDIS_BUSES_LAST_SEEN_KEY)
             .arg("-inf")
@@ -423,6 +440,30 @@ async fn load_active_bus_snapshot(
             .collect()
     };
 
+    let motion_states: HashMap<String, BusMotionState> = if active_bus_ids.is_empty() {
+        HashMap::new()
+    } else {
+        let raw_states: Vec<Option<String>> = redis::cmd("HMGET")
+            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(&active_bus_ids)
+            .query_async(&mut redis_conn)
+            .await
+            .map_err(internal_error)?;
+
+        active_bus_ids
+            .iter()
+            .cloned()
+            .zip(raw_states.into_iter())
+            .filter_map(|(bus_no, raw_state)| {
+                raw_state.and_then(|value| {
+                    serde_json::from_str::<BusMotionState>(&value)
+                        .ok()
+                        .map(|state| (bus_no, state))
+                })
+            })
+            .collect()
+    };
+
     let last_ingest_at_unix_ms: Option<i64> = redis::cmd("GET")
         .arg(REDIS_INGEST_LAST_KEY)
         .query_async(&mut redis_conn)
@@ -431,6 +472,7 @@ async fn load_active_bus_snapshot(
 
     Ok(RedisBusSnapshot {
         buses,
+        motion_states,
         active_bus_count: active_bus_ids.len(),
         last_ingest_at_unix_ms,
     })
@@ -613,6 +655,36 @@ async fn write_buses_to_redis(
     now_ms: i64,
 ) -> Result<usize, String> {
     let mut serialized_entries: Vec<(String, String)> = Vec::new();
+    let valid_buses: HashMap<String, &BusPosition> = buses
+        .iter()
+        .filter(|bus| !bus.bus_no.is_empty())
+        .map(|bus| (bus.bus_no.clone(), bus))
+        .collect();
+    let bus_ids: Vec<String> = valid_buses.keys().cloned().collect();
+
+    let previous_motion_states: HashMap<String, BusMotionState> = if bus_ids.is_empty() {
+        HashMap::new()
+    } else {
+        let raw_states: Vec<Option<String>> = redis::cmd("HMGET")
+            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(&bus_ids)
+            .query_async(redis_conn)
+            .await
+            .map_err(|error| error.to_string())?;
+
+        bus_ids
+            .iter()
+            .cloned()
+            .zip(raw_states.into_iter())
+            .filter_map(|(bus_no, raw_state)| {
+                raw_state.and_then(|value| {
+                    serde_json::from_str::<BusMotionState>(&value)
+                        .ok()
+                        .map(|state| (bus_no, state))
+                })
+            })
+            .collect()
+    };
 
     for bus in buses {
         if bus.bus_no.is_empty() {
@@ -630,10 +702,20 @@ async fn write_buses_to_redis(
 
     let mut pipe = redis::pipe();
     for (bus_no, bus_json) in &serialized_entries {
+        let Some(bus) = valid_buses.get(bus_no) else {
+            continue;
+        };
+        let motion_state = update_bus_motion_state(previous_motion_states.get(bus_no), bus, now_ms);
+
         pipe.cmd("HSET")
             .arg(REDIS_BUSES_LATEST_KEY)
             .arg(bus_no)
             .arg(bus_json)
+            .ignore();
+        pipe.cmd("HSET")
+            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(bus_no)
+            .arg(serde_json::to_string(&motion_state).map_err(|error| error.to_string())?)
             .ignore();
         pipe.cmd("ZADD")
             .arg(REDIS_BUSES_LAST_SEEN_KEY)
@@ -754,6 +836,7 @@ async fn get_route_t789(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(&state).await?;
     let gtfs = load_gtfs_context()?;
+    let visible_buses = filter_non_stationary_buses(&snapshot);
     let route_stops = get_stops_by_route(
         "T7890",
         &gtfs.routes,
@@ -762,8 +845,7 @@ async fn get_route_t789(
         &gtfs.stops_map,
     )
     .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
-    let t789_buses: Vec<RouteBusPositionResponse> = snapshot
-        .buses
+    let t789_buses: Vec<RouteBusPositionResponse> = visible_buses
         .into_iter()
         .filter(|bus| is_t789_route(&bus.route))
         .map(|bus| {
@@ -914,6 +996,7 @@ fn calculate_stop_eta_from_snapshot(
     gtfs: &GtfsContext,
     stop_id: &str,
 ) -> Vec<BusEta> {
+    let visible_buses = filter_non_stationary_buses(snapshot);
     let mut all_eta_results: Vec<BusEta> = Vec::new();
     let mut seen_bus_route: HashSet<String> = HashSet::new();
 
@@ -934,7 +1017,7 @@ fn calculate_stop_eta_from_snapshot(
         }
 
         let route_eta_results = match calculate_route_eta_from_stops(
-            &snapshot.buses,
+            &visible_buses,
             &route.route_id,
             stop_id,
             &route_stops,
@@ -958,6 +1041,66 @@ fn calculate_stop_eta_from_snapshot(
     });
 
     all_eta_results
+}
+
+fn update_bus_motion_state(
+    previous_state: Option<&BusMotionState>,
+    bus: &BusPosition,
+    now_ms: i64,
+) -> BusMotionState {
+    let reference_lat = previous_state
+        .map(|state| state.reference_lat)
+        .unwrap_or(bus.latitude);
+    let reference_lon = previous_state
+        .map(|state| state.reference_lon)
+        .unwrap_or(bus.longitude);
+    let distance_from_reference =
+        haversine_distance(bus.latitude, bus.longitude, reference_lat, reference_lon);
+    let is_slow = bus.speed <= STATIONARY_SPEED_THRESHOLD_KMH;
+
+    if distance_from_reference >= STATIONARY_DISTANCE_THRESHOLD_KM {
+        return BusMotionState {
+            reference_lat: bus.latitude,
+            reference_lon: bus.longitude,
+            stationary_since_unix_ms: is_slow.then_some(now_ms),
+        };
+    }
+
+    if is_slow {
+        return BusMotionState {
+            reference_lat,
+            reference_lon,
+            stationary_since_unix_ms: previous_state
+                .and_then(|state| state.stationary_since_unix_ms)
+                .or(Some(now_ms)),
+        };
+    }
+
+    BusMotionState {
+        reference_lat: bus.latitude,
+        reference_lon: bus.longitude,
+        stationary_since_unix_ms: None,
+    }
+}
+
+fn is_bus_stationary(snapshot: &RedisBusSnapshot, bus_no: &str, now_ms: i64) -> bool {
+    snapshot
+        .motion_states
+        .get(bus_no)
+        .and_then(|state| state.stationary_since_unix_ms)
+        .map(|since_ms| now_ms - since_ms >= STATIONARY_WINDOW_MS)
+        .unwrap_or(false)
+}
+
+fn filter_non_stationary_buses(snapshot: &RedisBusSnapshot) -> Vec<BusPosition> {
+    let now_ms = now_unix_ms();
+
+    snapshot
+        .buses
+        .iter()
+        .filter(|bus| !is_bus_stationary(snapshot, &bus.bus_no, now_ms))
+        .cloned()
+        .collect()
 }
 
 fn resolve_current_stop(
@@ -1012,6 +1155,7 @@ async fn calculate_route_eta(
     target_stop_id: &str,
 ) -> Result<Vec<BusEta>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(state).await?;
+    let visible_buses = filter_non_stationary_buses(&snapshot);
     let gtfs = load_gtfs_context()?;
     let route_stops = get_stops_by_route(
         route_id,
@@ -1022,7 +1166,7 @@ async fn calculate_route_eta(
     )
     .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
 
-    calculate_route_eta_from_stops(&snapshot.buses, route_id, target_stop_id, &route_stops).map_err(
+    calculate_route_eta_from_stops(&visible_buses, route_id, target_stop_id, &route_stops).map_err(
         |message| {
             (
                 StatusCode::NOT_FOUND,
