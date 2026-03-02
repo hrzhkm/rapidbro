@@ -20,3 +20,4 @@ Thumbs.db
 be/Cargo.lock
 
 dump.rdb
+.pnpm-store/
