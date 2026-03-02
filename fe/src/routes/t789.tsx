@@ -76,11 +76,52 @@ type T789RouteMapProps = {
   onSelectBus: (busNo: string) => void
 }
 
+type RoutePoint = [number, number]
+
 function escapeLeafletHtml(value: string) {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+}
+
+function getBearingDegrees(
+  [startLat, startLon]: RoutePoint,
+  [endLat, endLon]: RoutePoint,
+) {
+  const startLatRad = (startLat * Math.PI) / 180
+  const endLatRad = (endLat * Math.PI) / 180
+  const deltaLonRad = ((endLon - startLon) * Math.PI) / 180
+
+  const y = Math.sin(deltaLonRad) * Math.cos(endLatRad)
+  const x =
+    Math.cos(startLatRad) * Math.sin(endLatRad) -
+    Math.sin(startLatRad) * Math.cos(endLatRad) * Math.cos(deltaLonRad)
+
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
+function getRouteArrows(routePath: RoutePoint[]) {
+  if (routePath.length < 3) {
+    return []
+  }
+
+  const targetArrowCount = 8
+  const step = Math.max(10, Math.floor(routePath.length / targetArrowCount))
+  const arrows: Array<{ point: RoutePoint; bearing: number; key: string }> = []
+
+  for (let index = step; index < routePath.length - 1; index += step) {
+    const previousPoint = routePath[index - 1]
+    const nextPoint = routePath[index + 1]
+
+    arrows.push({
+      point: routePath[index],
+      bearing: getBearingDegrees(previousPoint, nextPoint),
+      key: `${routePath[index][0]}:${routePath[index][1]}:${index}`,
+    })
+  }
+
+  return arrows
 }
 
 function T789RouteMap({
@@ -168,9 +209,10 @@ function T789RouteMap({
       const shapePoints = routeShape?.points ?? []
       const targetStop =
         stops.find((stop) => stop.stop_id === targetStopId) ?? null
+      let routePath: RoutePoint[] = []
 
       if (shapePoints.length > 1) {
-        const routePath = shapePoints.map(
+        routePath = shapePoints.map(
           (point) => [point.lat, point.lon] as [number, number],
         )
         routePath.forEach((point) => points.push(point))
@@ -181,7 +223,7 @@ function T789RouteMap({
           opacity: 0.9,
         }).addTo(overlayLayer)
       } else if (stops.length > 1) {
-        const routePath = stops.map(
+        routePath = stops.map(
           (stop) => [stop.stop_lat, stop.stop_lon] as [number, number],
         )
         routePath.forEach((point) => points.push(point))
@@ -192,6 +234,19 @@ function T789RouteMap({
           opacity: 0.8,
         }).addTo(overlayLayer)
       }
+
+      getRouteArrows(routePath).forEach((arrow) => {
+        L.marker(arrow.point, {
+          interactive: false,
+          keyboard: false,
+          icon: L.divIcon({
+            className: 't789-route-arrow-icon',
+            html: `<div class="t789-route-arrow" style="transform: rotate(${arrow.bearing}deg)"></div>`,
+            iconSize: [18, 18],
+            iconAnchor: [9, 9],
+          }),
+        }).addTo(overlayLayer)
+      })
 
       stops.forEach((stop) => {
         const isTargetStop = stop.stop_id === targetStopId
