@@ -89,22 +89,27 @@
 
 .t789-bus-marker {
   display: inline-flex;
-  min-width: 2.25rem;
+  height: 2.125rem;
+  width: 2.125rem;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 2px solid oklch(0.24 0.06 200);
+  border: 2px solid oklch(0.24 0.06 200 / 0.18);
   background: oklch(0.99 0.01 100 / 0.96);
-  padding: 0.3rem 0.55rem;
   color: oklch(0.22 0.03 220);
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
   box-shadow: 0 10px 24px oklch(0.2 0.02 220 / 0.16);
 }
 
 .t789-bus-marker.is-selected {
   border-color: oklch(0.61 0.18 30);
-  background: oklch(0.72 0.16 40 / 0.96);
-  color: oklch(0.99 0.01 100);
+  background: oklch(0.72 0.16 40 / 0.2);
+  box-shadow:
+    0 0 0 4px oklch(0.72 0.16 40 / 0.18),
+    0 10px 24px oklch(0.2 0.02 220 / 0.2);
+}
+
+.t789-bus-marker-image {
+  height: 1.2rem;
+  width: 1.2rem;
+  display: block;
 }

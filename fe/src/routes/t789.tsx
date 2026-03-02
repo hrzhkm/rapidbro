@@ -226,9 +226,9 @@ function T789RouteMap({
         const marker = L.marker([bus.latitude, bus.longitude], {
           icon: L.divIcon({
             className: 't789-bus-icon',
-            html: `<div class="t789-bus-marker${isSelected ? ' is-selected' : ''}">${escapeLeafletHtml(bus.bus_no)}</div>`,
-            iconSize: [44, 32],
-            iconAnchor: [22, 16],
+            html: `<div class="t789-bus-marker${isSelected ? ' is-selected' : ''}"><img src="/bus-icon.svg" alt="" class="t789-bus-marker-image" /></div>`,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17],
           }),
           title: `Bus ${bus.bus_no}`,
         })
@@ -238,6 +238,9 @@ function T789RouteMap({
         })
 
         marker
+          .bindTooltip(
+            `<strong>Bus ${escapeLeafletHtml(bus.bus_no)}</strong><br/>Speed: ${bus.speed.toFixed(1)} km/h<br/>Current stop: ${escapeLeafletHtml(currentStopLabel)}`,
+          )
           .bindPopup(
             `<strong>Bus ${escapeLeafletHtml(bus.bus_no)}</strong><br/>Speed: ${bus.speed.toFixed(1)} km/h<br/>Current stop: ${escapeLeafletHtml(currentStopLabel)}`,
           )
