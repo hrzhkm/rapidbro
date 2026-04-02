@@ -14,7 +14,7 @@ describe('map layout helpers', () => {
   it('returns the correct mobile transform class', () => {
     expect(getMobilePanelTransformClass(true)).toBe('translate-y-0')
     expect(getMobilePanelTransformClass(false)).toBe(
-      'translate-y-[calc(100%-3.5rem)] md:translate-y-0',
+      'translate-y-[calc(100%-4.5rem)] md:translate-y-0',
     )
   })
 })

@@ -33,9 +33,12 @@ function MapPanelShell({
         data-testid="map-side-panel"
         data-mobile-open={isMobilePanelOpen}
         className={cn(
-          'absolute inset-x-0 bottom-0 z-30 max-h-[84dvh] rounded-t-3xl border border-amber-200/85 bg-amber-50/84 text-slate-800 shadow-[0_-20px_55px_rgba(148,163,184,0.28)] backdrop-blur-xl transition-transform duration-300 md:inset-y-4 md:right-4 md:left-auto md:w-[26.5rem] md:max-h-none md:rounded-3xl md:translate-y-0',
+          'absolute inset-x-0 bottom-2 z-30 flex max-h-[88dvh] flex-col rounded-t-3xl border border-amber-200/85 bg-amber-50/84 text-slate-800 shadow-[0_-20px_55px_rgba(148,163,184,0.28)] backdrop-blur-xl transition-transform duration-300 md:inset-y-4 md:right-4 md:left-auto md:w-[26.5rem] md:max-h-none md:rounded-3xl md:translate-y-0',
           getMobilePanelTransformClass(isMobilePanelOpen),
         )}
+        style={{
+          paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)',
+        }}
       >
         <div className="flex items-start justify-between gap-3 border-b border-amber-200/85 px-4 py-3.5 md:px-5">
           <div className="min-w-0">
@@ -65,7 +68,7 @@ function MapPanelShell({
           <div className="border-b border-amber-200/70 px-4 py-3 md:px-5">{panelActions}</div>
         ) : null}
 
-        <div className="max-h-[calc(84dvh-8.6rem)] space-y-4 overflow-y-auto px-4 py-4 md:max-h-[calc(100dvh-12.5rem)] md:px-5 md:pb-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 md:px-5 md:pb-5">
           {children}
         </div>
       </aside>
