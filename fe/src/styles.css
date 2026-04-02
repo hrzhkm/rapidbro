@@ -142,13 +142,24 @@
 }
 
 .route-direction-arrow {
+  position: relative;
+  width: 1.125rem;
+  height: 1.125rem;
+  transform: rotate(var(--route-arrow-rotation, 0deg));
+  transform-origin: center;
+}
+
+.route-direction-arrow::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
   width: 0;
   height: 0;
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
   border-bottom: 10px solid #0f172a;
+  transform: translate(-50%, -50%);
   filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.98))
     drop-shadow(0 0 1px rgba(255, 255, 255, 0.98));
-  transform: rotate(var(--route-arrow-rotation, 0deg));
-  transform-origin: center;
 }
