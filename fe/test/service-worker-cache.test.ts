@@ -121,12 +121,19 @@ async function loadServiceWorkerWithMocks(options?: {
 }
 
 describe.sequential('service worker tile caching', () => {
+  let envToRestore: { restore: () => void } | null = null
+
   afterEach(() => {
     vi.restoreAllMocks()
+    if (envToRestore) {
+      envToRestore.restore()
+      envToRestore = null
+    }
   })
 
   it('handles install by calling skipWaiting', async () => {
     const env = await loadServiceWorkerWithMocks()
+    envToRestore = env
 
     const waits: Promise<unknown>[] = []
     env.listeners.install?.({
@@ -137,14 +144,13 @@ describe.sequential('service worker tile caching', () => {
 
     await Promise.all(waits)
     expect(env.skipWaiting).toHaveBeenCalledOnce()
-
-    env.restore()
   })
 
   it('removes old tile caches on activate and claims clients', async () => {
     const env = await loadServiceWorkerWithMocks({
       cacheNames: ['rapidbro-osm-tiles-v0', 'rapidbro-osm-tiles-v1', 'other-cache'],
     })
+    envToRestore = env
 
     const waits: Promise<unknown>[] = []
     env.listeners.activate?.({
@@ -156,8 +162,6 @@ describe.sequential('service worker tile caching', () => {
     await Promise.all(waits)
     expect(env.deletedCacheNames).toEqual(['rapidbro-osm-tiles-v0'])
     expect(env.claim).toHaveBeenCalledOnce()
-
-    env.restore()
   })
 
   it('serves fresh cached OSM tile without network request', async () => {
@@ -174,6 +178,7 @@ describe.sequential('service worker tile caching', () => {
         ],
       ],
     })
+    envToRestore = env
 
     let responsePromise: Promise<Response> | undefined
     env.listeners.fetch?.({
@@ -188,8 +193,6 @@ describe.sequential('service worker tile caching', () => {
     const response = await responsePromise
     expect(await response.text()).toBe('cached')
     expect(env.fetchMock).not.toHaveBeenCalled()
-
-    env.restore()
   })
 
   it('uses network and stores tile in cache on cache miss', async () => {
@@ -201,6 +204,7 @@ describe.sequential('service worker tile caching', () => {
           headers: { 'content-type': 'image/png' },
         }),
     })
+    envToRestore = env
 
     let responsePromise: Promise<Response> | undefined
     env.listeners.fetch?.({
@@ -218,8 +222,6 @@ describe.sequential('service worker tile caching', () => {
     const cached = await env.cache.match(new Request(tileUrl))
     expect(cached).toBeDefined()
     expect(cached?.headers.get('x-rapidbro-sw-cached-at')).toBeTruthy()
-
-    env.restore()
   })
 
   it('serves stale cached tile and refreshes in background', async () => {
@@ -241,6 +243,7 @@ describe.sequential('service worker tile caching', () => {
           headers: { 'content-type': 'image/png' },
         }),
     })
+    envToRestore = env
 
     const backgroundJobs: Promise<unknown>[] = []
     let responsePromise: Promise<Response> | undefined
@@ -264,12 +267,11 @@ describe.sequential('service worker tile caching', () => {
     const refreshed = await env.cache.match(new Request(tileUrl))
     expect(refreshed).toBeDefined()
     expect(await refreshed?.text()).toBe('fresh-network')
-
-    env.restore()
   })
 
   it('ignores non-OSM requests', async () => {
     const env = await loadServiceWorkerWithMocks()
+    envToRestore = env
 
     let responded = false
     env.listeners.fetch?.({
@@ -282,7 +284,5 @@ describe.sequential('service worker tile caching', () => {
 
     expect(responded).toBe(false)
     expect(env.fetchMock).not.toHaveBeenCalled()
-
-    env.restore()
   })
 })

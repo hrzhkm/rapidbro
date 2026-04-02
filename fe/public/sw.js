@@ -55,9 +55,18 @@ async function pruneCache(cache) {
     return
   }
 
+  const requestsWithAge = []
+  for (const request of requests) {
+    const response = await cache.match(request)
+    const age = response ? getCachedAgeMs(response) : Number.POSITIVE_INFINITY
+    requestsWithAge.push({ request, age })
+  }
+
+  requestsWithAge.sort((a, b) => b.age - a.age)
+
   const excessCount = requests.length - TILE_CACHE_MAX_ENTRIES
   for (let index = 0; index < excessCount; index += 1) {
-    await cache.delete(requests[index])
+    await cache.delete(requestsWithAge[index].request)
   }
 }
 

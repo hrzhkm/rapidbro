@@ -110,6 +110,7 @@ export function buildRoutePrefetchWarning({
     return null
   }
 
-  const loadedCount = Math.max(totalRouteCount - failedRouteIds.length, 0)
+  const uniqueFailedCount = new Set(failedRouteIds).size
+  const loadedCount = Math.max(totalRouteCount - uniqueFailedCount, 0)
   return `Loaded ${loadedCount}/${totalRouteCount} routes. Some route paths are unavailable.`
 }
