@@ -30,6 +30,13 @@ describe('getVisibleRouteIds', () => {
   it('returns only selected route when route is selected', () => {
     expect(getVisibleRouteIds(routeIds, 'U7800')).toEqual(['U7800'])
   })
+
+  it('deduplicates route ids in all-routes mode', () => {
+    expect(getVisibleRouteIds(['T7890', 'U7800', 'T7890'], null)).toEqual([
+      'T7890',
+      'U7800',
+    ])
+  })
 })
 
 describe('shouldShowRouteStopMarkers', () => {

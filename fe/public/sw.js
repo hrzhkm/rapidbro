@@ -55,19 +55,22 @@ async function pruneCache(cache) {
     return
   }
 
-  const requestsWithAge = []
-  for (const request of requests) {
-    const response = await cache.match(request)
-    const age = response ? getCachedAgeMs(response) : Number.POSITIVE_INFINITY
-    requestsWithAge.push({ request, age })
-  }
+  const requestsWithAge = await Promise.all(
+    requests.map(async (request) => {
+      const response = await cache.match(request)
+      const age = response ? getCachedAgeMs(response) : Number.POSITIVE_INFINITY
+      return { request, age }
+    }),
+  )
 
   requestsWithAge.sort((a, b) => b.age - a.age)
 
   const excessCount = requests.length - TILE_CACHE_MAX_ENTRIES
-  for (let index = 0; index < excessCount; index += 1) {
-    await cache.delete(requestsWithAge[index].request)
-  }
+  await Promise.all(
+    requestsWithAge
+      .slice(0, excessCount)
+      .map(({ request }) => cache.delete(request)),
+  )
 }
 
 async function writeTileToCache(request, response) {

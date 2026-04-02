@@ -49,7 +49,7 @@ export function getVisibleRouteIds(
   selectedRouteId: string | null,
 ): string[] {
   if (selectedRouteId === null) {
-    return routeIds
+    return Array.from(new Set(routeIds))
   }
 
   return routeIds.includes(selectedRouteId) ? [selectedRouteId] : []
