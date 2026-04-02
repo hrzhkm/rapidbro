@@ -154,6 +154,13 @@ function App() {
     selectedMapRouteShape,
     selectedMapRouteStops?.stops,
   )
+  const visibleMapBuses = useMemo(
+    () =>
+      selectedMapRouteId
+        ? nearestStopEta.filter((eta) => eta.route_id === selectedMapRouteId)
+        : nearestStopEta,
+    [nearestStopEta, selectedMapRouteId],
+  )
 
   const fetchNearestStop = async (lat: number, lon: number) => {
     const params = new URLSearchParams({
@@ -437,7 +444,7 @@ function App() {
         showLegend={false}
         stops={selectedMapRouteStops.stops}
         polylinePoints={selectedMapRoutePolylinePoints}
-        buses={nearestStopEta.map((eta) => ({
+        buses={visibleMapBuses.map((eta) => ({
           id: getBusKey(eta),
           label: `Bus ${eta.bus_no}`,
           lat: eta.current_lat,
