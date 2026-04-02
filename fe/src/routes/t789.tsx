@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, LoaderCircle, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { MapPanelShell } from '@/components/MapPanelShell'
 import { Button } from '@/components/ui/button'
+import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import {
   buildRoutePolylinePoints,
   type RouteShape,
@@ -50,6 +51,7 @@ type RouteStopsResponse = {
 
 const panelSectionClass =
   'rounded-2xl border border-amber-200/80 bg-white/78 p-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]'
+const BUS_GRACE_WINDOW_MS = 5 * 60 * 1000
 
 function T789Page() {
   const targetStopId = '1000838'
@@ -60,6 +62,10 @@ function T789Page() {
 
   const [activeBuses, setActiveBuses] = useState<T789Bus[]>([])
   const [etas, setEtas] = useState<BusEta[]>([])
+  const activeBusesRef = useRef<T789Bus[]>([])
+  const etasRef = useRef<BusEta[]>([])
+  const lastNonEmptyActiveAtMsRef = useRef<number | null>(null)
+  const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
   const [routeStops, setRouteStops] = useState<RouteStopsResponse | null>(null)
   const [routeShape, setRouteShape] = useState<RouteShape | null>(null)
   const [isLoadingRouteShape, setIsLoadingRouteShape] = useState(false)
@@ -69,6 +75,10 @@ function T789Page() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [etaErrorMessage, setEtaErrorMessage] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [isActiveGraceHeld, setIsActiveGraceHeld] = useState(false)
+  const [isEtaGraceHeld, setIsEtaGraceHeld] = useState(false)
+  const [lastNonEmptyActiveAt, setLastNonEmptyActiveAt] = useState<Date | null>(null)
+  const [lastNonEmptyEtaAt, setLastNonEmptyEtaAt] = useState<Date | null>(null)
 
   const selectedActiveBus =
     selectedBusNo === null
@@ -92,6 +102,14 @@ function T789Page() {
   )
   const interactiveCardClassName =
     'block w-full cursor-pointer rounded-xl border border-amber-200/80 bg-white/70 p-2 text-left text-xs transition-colors outline-none focus-visible:border-amber-300 focus-visible:ring-2 focus-visible:ring-amber-200/60'
+
+  useEffect(() => {
+    activeBusesRef.current = activeBuses
+  }, [activeBuses])
+
+  useEffect(() => {
+    etasRef.current = etas
+  }, [etas])
 
   const normalizeT789Buses = (payload: unknown): T789Bus[] => {
     if (Array.isArray(payload)) {
@@ -117,22 +135,36 @@ function T789Page() {
         fetch(`${apiBaseUrl}/route/T7890/stops`),
       ])
 
-      if (!busesResponse.ok) {
+      let normalizedBuses: T789Bus[] = []
+      if (busesResponse.ok) {
+        const payload = (await busesResponse.json()) as unknown
+        normalizedBuses = normalizeT789Buses(payload)
+      } else {
         const fallbackMessage = 'Unable to fetch active T789 buses'
         const body = (await busesResponse.json().catch(() => null)) as {
           error?: string
         } | null
-        throw new Error(body?.error ?? fallbackMessage)
+        setErrorMessage(body?.error ?? fallbackMessage)
       }
 
-      const payload = (await busesResponse.json()) as unknown
-      const normalizedBuses = normalizeT789Buses(payload)
-      setActiveBuses(normalizedBuses)
+      const mergedBuses = mergeBusesWithGraceHold({
+        incoming: normalizedBuses,
+        previous: activeBusesRef.current,
+        fetchSucceeded: busesResponse.ok,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyActiveAtMsRef.current,
+      })
+      setActiveBuses(mergedBuses.buses)
+      setIsActiveGraceHeld(mergedBuses.isGraceHeld)
+      setLastNonEmptyActiveAt(
+        mergedBuses.lastNonEmptyAtMs === null
+          ? null
+          : new Date(mergedBuses.lastNonEmptyAtMs),
+      )
+      lastNonEmptyActiveAtMsRef.current = mergedBuses.lastNonEmptyAtMs
       setSelectedBusNo((current) => {
-        if (
-          current &&
-          normalizedBuses.some((bus) => bus.bus_no === current)
-        ) {
+        if (current && mergedBuses.buses.some((bus) => bus.bus_no === current)) {
           return current
         }
 
@@ -141,14 +173,44 @@ function T789Page() {
 
       if (etaResponse.ok) {
         const etaData = (await etaResponse.json()) as BusEta[]
-        setEtas(etaData)
+        const mergedEta = mergeBusesWithGraceHold({
+          incoming: etaData,
+          previous: etasRef.current,
+          fetchSucceeded: true,
+          nowMs: Date.now(),
+          graceWindowMs: BUS_GRACE_WINDOW_MS,
+          lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+        })
+        setEtas(mergedEta.buses)
+        setIsEtaGraceHeld(mergedEta.isGraceHeld)
+        setLastNonEmptyEtaAt(
+          mergedEta.lastNonEmptyAtMs === null
+            ? null
+            : new Date(mergedEta.lastNonEmptyAtMs),
+        )
+        lastNonEmptyEtaAtMsRef.current = mergedEta.lastNonEmptyAtMs
       } else {
         const fallbackMessage = 'Unable to fetch ETA to KL Gateway'
         const body = (await etaResponse.json().catch(() => null)) as {
           error?: string
         } | null
         setEtaErrorMessage(body?.error ?? fallbackMessage)
-        setEtas([])
+        const mergedEta = mergeBusesWithGraceHold({
+          incoming: [],
+          previous: etasRef.current,
+          fetchSucceeded: false,
+          nowMs: Date.now(),
+          graceWindowMs: BUS_GRACE_WINDOW_MS,
+          lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+        })
+        setEtas(mergedEta.buses)
+        setIsEtaGraceHeld(mergedEta.isGraceHeld)
+        setLastNonEmptyEtaAt(
+          mergedEta.lastNonEmptyAtMs === null
+            ? null
+            : new Date(mergedEta.lastNonEmptyAtMs),
+        )
+        lastNonEmptyEtaAtMsRef.current = mergedEta.lastNonEmptyAtMs
       }
 
       if (stopsResponse.ok) {
@@ -171,6 +233,39 @@ function T789Page() {
           ? error.message
           : 'Unable to fetch active T789 buses',
       )
+      const mergedBuses = mergeBusesWithGraceHold({
+        incoming: [],
+        previous: activeBusesRef.current,
+        fetchSucceeded: false,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyActiveAtMsRef.current,
+      })
+      setActiveBuses(mergedBuses.buses)
+      setIsActiveGraceHeld(mergedBuses.isGraceHeld)
+      setLastNonEmptyActiveAt(
+        mergedBuses.lastNonEmptyAtMs === null
+          ? null
+          : new Date(mergedBuses.lastNonEmptyAtMs),
+      )
+      lastNonEmptyActiveAtMsRef.current = mergedBuses.lastNonEmptyAtMs
+
+      const mergedEta = mergeBusesWithGraceHold({
+        incoming: [],
+        previous: etasRef.current,
+        fetchSucceeded: false,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+      })
+      setEtas(mergedEta.buses)
+      setIsEtaGraceHeld(mergedEta.isGraceHeld)
+      setLastNonEmptyEtaAt(
+        mergedEta.lastNonEmptyAtMs === null
+          ? null
+          : new Date(mergedEta.lastNonEmptyAtMs),
+      )
+      lastNonEmptyEtaAtMsRef.current = mergedEta.lastNonEmptyAtMs
     } finally {
       setIsLoading(false)
     }
@@ -243,11 +338,22 @@ function T789Page() {
       panelTitle="T789 Control Panel"
       panelDescription="Monitor active T789 buses and ETA to KL Gateway."
       panelStatus={
-        <p className="text-slate-600">
-          {lastUpdated
-            ? `Updated ${lastUpdated.toLocaleTimeString()}`
-            : 'No updates yet'}
-        </p>
+        <div>
+          <p className="text-slate-600">
+            {lastUpdated
+              ? `Updated ${lastUpdated.toLocaleTimeString()}`
+              : 'No updates yet'}
+          </p>
+          {isActiveGraceHeld || isEtaGraceHeld ? (
+            <p className="text-xs text-amber-700">
+              Showing last live buses from{' '}
+              {lastNonEmptyActiveAt?.toLocaleTimeString() ??
+                lastNonEmptyEtaAt?.toLocaleTimeString() ??
+                'recent update'}{' '}
+              (temporary stale data)
+            </p>
+          ) : null}
+        </div>
       }
       panelActions={
         <Button

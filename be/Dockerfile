@@ -23,8 +23,9 @@ COPY --from=builder /app/be/target/release/be /usr/local/bin/rapidbro-be
 COPY rapid_kl_data /app/rapid_kl_data
 
 ENV REDIS_URL=redis://redis:6379/
-ENV BUS_TTL_SECONDS=120
+ENV BUS_TTL_SECONDS=300
 ENV STALE_AFTER_SECONDS=20
+ENV STATIONARY_WINDOW_SECONDS=300
 ENV GTFS_DATA_PATH=/app/rapid_kl_data
 
 EXPOSE 3030

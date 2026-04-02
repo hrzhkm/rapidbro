@@ -5,6 +5,7 @@ import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { MapPanelShell } from '@/components/MapPanelShell'
 import { Button } from '@/components/ui/button'
+import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import { getGeolocationPosition } from '@/lib/geolocation'
 import {
   buildRoutePrefetchWarning,
@@ -75,6 +76,7 @@ type UserCoords = {
 const panelSectionClass =
   'rounded-2xl border border-amber-200/80 bg-white/78 p-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]'
 const panelSubtleTextClass = 'text-xs text-slate-600'
+const BUS_GRACE_WINDOW_MS = 5 * 60 * 1000
 
 function App() {
   const apiBaseUrl = useMemo(
@@ -82,6 +84,8 @@ function App() {
     [],
   )
   const hasAutoRequestedNearestStopRef = useRef(false)
+  const nearestStopEtaRef = useRef<BusEta[]>([])
+  const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
   const [coords, setCoords] = useState<UserCoords | null>(null)
   const [nearestStop, setNearestStop] = useState<NearestStopResponse | null>(
     null,
@@ -106,6 +110,8 @@ function App() {
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false)
   const [isLoadingSelectedRoute, setIsLoadingSelectedRoute] = useState(false)
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
+  const [lastNonEmptyEtaAt, setLastNonEmptyEtaAt] = useState<Date | null>(null)
+  const [isEtaGraceHeld, setIsEtaGraceHeld] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [etaErrorMessage, setEtaErrorMessage] = useState<string | null>(null)
   const [routeErrorMessage, setRouteErrorMessage] = useState<string | null>(
@@ -162,6 +168,10 @@ function App() {
     [nearestStopEta, selectedMapRouteId],
   )
 
+  useEffect(() => {
+    nearestStopEtaRef.current = nearestStopEta
+  }, [nearestStopEta])
+
   const fetchNearestStop = async (lat: number, lon: number) => {
     const params = new URLSearchParams({
       lat: lat.toString(),
@@ -197,17 +207,59 @@ function App() {
         const body = (await response.json().catch(() => null)) as {
           error?: string
         } | null
-        throw new Error(body?.error ?? fallbackMessage)
+        setEtaErrorMessage(body?.error ?? fallbackMessage)
+        const merged = mergeBusesWithGraceHold({
+          incoming: [],
+          previous: nearestStopEtaRef.current,
+          fetchSucceeded: false,
+          nowMs: Date.now(),
+          graceWindowMs: BUS_GRACE_WINDOW_MS,
+          lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+        })
+        setNearestStopEta(merged.buses)
+        setIsEtaGraceHeld(merged.isGraceHeld)
+        setLastNonEmptyEtaAt(
+          merged.lastNonEmptyAtMs === null ? null : new Date(merged.lastNonEmptyAtMs),
+        )
+        lastNonEmptyEtaAtMsRef.current = merged.lastNonEmptyAtMs
+        return
       }
 
       const data = (await response.json()) as BusEta[]
-      setNearestStopEta(data)
+      const merged = mergeBusesWithGraceHold({
+        incoming: data,
+        previous: nearestStopEtaRef.current,
+        fetchSucceeded: true,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+      })
+      setNearestStopEta(merged.buses)
+      setIsEtaGraceHeld(merged.isGraceHeld)
+      setLastNonEmptyEtaAt(
+        merged.lastNonEmptyAtMs === null ? null : new Date(merged.lastNonEmptyAtMs),
+      )
+      lastNonEmptyEtaAtMsRef.current = merged.lastNonEmptyAtMs
     } catch (error) {
       setEtaErrorMessage(
         error instanceof Error
           ? error.message
           : 'Unable to fetch ETA for nearest stop',
       )
+      const merged = mergeBusesWithGraceHold({
+        incoming: [],
+        previous: nearestStopEtaRef.current,
+        fetchSucceeded: false,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+      })
+      setNearestStopEta(merged.buses)
+      setIsEtaGraceHeld(merged.isGraceHeld)
+      setLastNonEmptyEtaAt(
+        merged.lastNonEmptyAtMs === null ? null : new Date(merged.lastNonEmptyAtMs),
+      )
+      lastNonEmptyEtaAtMsRef.current = merged.lastNonEmptyAtMs
     } finally {
       setIsLoadingEta(false)
     }
@@ -585,11 +637,22 @@ function App() {
       panelTitle="Nearest Bus Stop"
       panelDescription="Track buses around your current stop with live route context."
       panelStatus={
-        <p className="text-slate-600">
-          {lastFetchedAt
-            ? `Updated ${lastFetchedAt.toLocaleTimeString()}`
-            : 'Waiting for location update'}
-        </p>
+        <div>
+          <p className="text-slate-600">
+            {lastFetchedAt
+              ? `Updated ${lastFetchedAt.toLocaleTimeString()}`
+              : 'Waiting for location update'}
+          </p>
+          {isEtaGraceHeld ? (
+            <p className="text-xs text-amber-700">
+              Showing last live buses from{' '}
+              {lastNonEmptyEtaAt
+                ? lastNonEmptyEtaAt.toLocaleTimeString()
+                : 'recent update'}{' '}
+              (temporary stale data)
+            </p>
+          ) : null}
+        </div>
       }
       panelActions={
         <div className="space-y-2">

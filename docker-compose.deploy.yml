@@ -14,8 +14,9 @@ services:
       - redis
     environment:
       REDIS_URL: redis://redis:6379/
-      BUS_TTL_SECONDS: "120"
+      BUS_TTL_SECONDS: "300"
       STALE_AFTER_SECONDS: "20"
+      STATIONARY_WINDOW_SECONDS: "300"
       GTFS_DATA_PATH: /app/rapid_kl_data
     ports:
       - "3030:3030"
