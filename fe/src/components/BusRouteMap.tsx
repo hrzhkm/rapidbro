@@ -24,7 +24,6 @@ type LeafletState = {
 }
 
 async function loadLeaflet() {
-  await import('leaflet/dist/leaflet.css')
   return import('leaflet')
 }
 
@@ -63,10 +62,17 @@ function BusRouteMap({
         zoomControl: true,
         attributionControl: true,
       })
+      const initialCenter =
+        stops[0] !== undefined
+          ? [stops[0].stop_lat, stops[0].stop_lon]
+          : [3.139, 101.6869]
+      map.setView(initialCenter as [number, number], 14)
 
       leaflet
-        .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
+        .tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution:
+            '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         })
         .addTo(map)
 
