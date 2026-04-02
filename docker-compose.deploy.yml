@@ -1,7 +1,7 @@
 services:
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    restart: always
     ports:
       - "6379:6379"
     volumes:
@@ -9,7 +9,7 @@ services:
 
   be:
     image: ${GHCR_NAMESPACE}/rapidbro-be:${IMAGE_TAG}
-    restart: unless-stopped
+    restart: always
     depends_on:
       - redis
     environment:
@@ -21,7 +21,7 @@ services:
 
   fe:
     image: ${GHCR_NAMESPACE}/rapidbro-fe:${IMAGE_TAG}
-    restart: unless-stopped
+    restart: always
     depends_on:
       - be
     ports:
