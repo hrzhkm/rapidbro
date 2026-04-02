@@ -136,6 +136,17 @@ describe('buildRoutePrefetchWarning', () => {
     )
   })
 
+  it('deduplicates failed route ids when computing loaded route count', () => {
+    const warning = buildRoutePrefetchWarning({
+      failedRouteIds: ['T7910', 'T7910'],
+      totalRouteCount: 3,
+    })
+
+    expect(warning).toBe(
+      'Loaded 2/3 routes. Some route paths are unavailable.',
+    )
+  })
+
   it('returns null when prefetch is fully successful', () => {
     expect(
       buildRoutePrefetchWarning({
