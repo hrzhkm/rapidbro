@@ -123,11 +123,24 @@ function BusRouteMap({
         leaflet.latLng(lat, lon),
       )
 
+      // High-contrast route line: dark casing + bright core.
       leaflet
         .polyline(lineLatLngs, {
-          color: '#d9f99d',
+          color: '#0f172a',
+          weight: 10,
+          opacity: 0.85,
+          lineCap: 'round',
+          lineJoin: 'round',
+        })
+        .addTo(layerGroup)
+
+      leaflet
+        .polyline(lineLatLngs, {
+          color: '#06b6d4',
           weight: 6,
-          opacity: 0.9,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round',
         })
         .addTo(layerGroup)
 
@@ -140,7 +153,7 @@ function BusRouteMap({
             radius: isCurrent || isTarget ? 8 : 4,
             color: isCurrent || isTarget ? '#78350f' : '#92400e',
             weight: isCurrent || isTarget ? 3 : 2,
-            fillColor: isCurrent ? '#f59e0b' : isTarget ? '#f97316' : '#eab308',
+            fillColor: isCurrent ? '#f59e0b' : isTarget ? '#f97316' : '#facc15',
             fillOpacity: 0.95,
           })
           .bindTooltip(stop.stop_name)
