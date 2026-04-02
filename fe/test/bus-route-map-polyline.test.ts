@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildRouteDirectionArrows,
+  getRouteArrowRenderConfig,
   resolvePolylinePointsForRendering,
 } from '@/components/BusRouteMap'
 
@@ -94,5 +95,21 @@ describe('buildRouteDirectionArrows', () => {
     expect(arrows).toHaveLength(1)
     expect(arrows[0]?.bearing).toBeGreaterThan(89.5)
     expect(arrows[0]?.bearing).toBeLessThan(90.5)
+  })
+})
+
+describe('getRouteArrowRenderConfig', () => {
+  it('uses dense arrows for single-route maps', () => {
+    expect(getRouteArrowRenderConfig(1)).toEqual({
+      spacingMeters: 380,
+      maxArrows: 24,
+    })
+  })
+
+  it('uses sparse arrows for multi-route overlays', () => {
+    expect(getRouteArrowRenderConfig(3)).toEqual({
+      spacingMeters: 1100,
+      maxArrows: 4,
+    })
   })
 })

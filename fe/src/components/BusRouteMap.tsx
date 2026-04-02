@@ -193,6 +193,24 @@ export function buildRouteDirectionArrows(
   return arrows
 }
 
+export function getRouteArrowRenderConfig(routeCount: number): {
+  spacingMeters: number
+  maxArrows: number
+} {
+  if (routeCount <= 1) {
+    return {
+      spacingMeters: 380,
+      maxArrows: 24,
+    }
+  }
+
+  // In all-routes overlays, reduce arrow density so route flow remains visible without clutter.
+  return {
+    spacingMeters: 1100,
+    maxArrows: 4,
+  }
+}
+
 async function loadLeaflet() {
   return import('leaflet')
 }
@@ -372,9 +390,13 @@ function BusRouteMap({
           .addTo(layerGroup)
       })
 
-      if (resolvedRouteLayers.length === 1) {
-        const firstRoutePoints = resolvedRouteLayers[0]?.polylinePoints ?? []
-        const directionArrows = buildRouteDirectionArrows(firstRoutePoints)
+      const arrowConfig = getRouteArrowRenderConfig(resolvedRouteLayers.length)
+      resolvedRouteLayers.forEach((routeLayer) => {
+        const directionArrows = buildRouteDirectionArrows(
+          routeLayer.polylinePoints,
+          arrowConfig.spacingMeters,
+          arrowConfig.maxArrows,
+        )
         directionArrows.forEach((arrow) => {
           leaflet
             .marker([arrow.lat, arrow.lon], {
@@ -389,7 +411,7 @@ function BusRouteMap({
             })
             .addTo(layerGroup)
         })
-      }
+      })
 
       if (showStopMarkers) {
         const seenStopIds = new Set<string>()
