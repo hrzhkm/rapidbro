@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path as StdPath;
+use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::{Notify, RwLock};
@@ -94,6 +94,14 @@ struct StopWithDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct ShapePoint {
+    shape_id: String,
+    shape_pt_lat: f64,
+    shape_pt_lon: f64,
+    shape_pt_sequence: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteStopsResponse {
     route_id: String,
     route_short_name: String,
@@ -101,10 +109,29 @@ struct RouteStopsResponse {
     stops: Vec<StopWithDetails>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct ShapePointResponse {
+    lat: f64,
+    lon: f64,
+    sequence: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RouteShapeResponse {
+    route_id: String,
+    shape_id: String,
+    points: Vec<ShapePointResponse>,
+}
+
 #[derive(Debug, Deserialize)]
 struct NearestStopQuery {
     lat: f64,
     lon: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct RouteShapeQuery {
+    stop_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -219,7 +246,6 @@ struct GtfsContext {
 }
 
 const SOCKET_URL: &str = "https://rapidbus-socketio-avl.prasarana.com.my";
-const GTFS_DATA_PATH: &str = "../rapid_kl_data";
 const REDIS_BUSES_LATEST_KEY: &str = "rapidbro:buses:latest";
 const REDIS_BUSES_LAST_SEEN_KEY: &str = "rapidbro:buses:last_seen";
 const REDIS_INGEST_LAST_KEY: &str = "rapidbro:ingestor:last_ingest_at";
@@ -297,6 +323,7 @@ async fn main() {
         .route("/stops/{stop_id}/eta", get(get_stop_eta))
         .route("/stops/{stop_id}/routes", get(get_stop_routes))
         .route("/route/{route_id}/stops", get(get_route_stops))
+        .route("/route/{route_id}/shape", get(get_route_shape))
         .route("/stops/nearest", get(get_nearest_stop))
         .layer(cors)
         .with_state(app_state);
@@ -1167,7 +1194,7 @@ async fn prasarana_gtfs_data() -> Json<gtfs_realtime::FeedMessage> {
 
 // GTFS data loading functions
 fn load_routes() -> Result<Vec<Route>, Box<dyn std::error::Error>> {
-    let path = StdPath::new(GTFS_DATA_PATH).join("routes.txt");
+    let path = gtfs_data_dir().join("routes.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -1181,7 +1208,7 @@ fn load_routes() -> Result<Vec<Route>, Box<dyn std::error::Error>> {
 }
 
 fn load_trips() -> Result<HashMap<String, Vec<Trip>>, Box<dyn std::error::Error>> {
-    let path = StdPath::new(GTFS_DATA_PATH).join("trips.txt");
+    let path = gtfs_data_dir().join("trips.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -1198,7 +1225,7 @@ fn load_trips() -> Result<HashMap<String, Vec<Trip>>, Box<dyn std::error::Error>
 }
 
 fn load_stop_times() -> Result<HashMap<String, Vec<StopTime>>, Box<dyn std::error::Error>> {
-    let path = StdPath::new(GTFS_DATA_PATH).join("stop_times.txt");
+    let path = gtfs_data_dir().join("stop_times.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -1215,7 +1242,7 @@ fn load_stop_times() -> Result<HashMap<String, Vec<StopTime>>, Box<dyn std::erro
 }
 
 fn load_stops() -> Result<HashMap<String, Stop>, Box<dyn std::error::Error>> {
-    let path = StdPath::new(GTFS_DATA_PATH).join("stops.txt");
+    let path = gtfs_data_dir().join("stops.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
@@ -1226,6 +1253,37 @@ fn load_stops() -> Result<HashMap<String, Stop>, Box<dyn std::error::Error>> {
         stops_map.insert(stop.stop_id.clone(), stop);
     }
     Ok(stops_map)
+}
+
+fn load_shapes() -> Result<HashMap<String, Vec<ShapePoint>>, Box<dyn std::error::Error>> {
+    let path = gtfs_data_dir().join("shapes.txt");
+    let file = File::open(path)?;
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(file);
+
+    let mut shapes_by_id: HashMap<String, Vec<ShapePoint>> = HashMap::new();
+    for result in rdr.deserialize() {
+        let shape_point: ShapePoint = result?;
+        shapes_by_id
+            .entry(shape_point.shape_id.clone())
+            .or_default()
+            .push(shape_point);
+    }
+
+    for points in shapes_by_id.values_mut() {
+        points.sort_by_key(|point| point.shape_pt_sequence);
+    }
+
+    Ok(shapes_by_id)
+}
+
+fn gtfs_data_dir() -> PathBuf {
+    if let Ok(path) = env::var("GTFS_DATA_PATH") {
+        return PathBuf::from(path);
+    }
+
+    StdPath::new(env!("CARGO_MANIFEST_DIR")).join("rapid_kl_data")
 }
 
 // Get stops by route_id
@@ -1288,6 +1346,98 @@ fn get_stops_by_route(
         route_short_name: route.route_short_name.clone(),
         route_long_name: route.route_long_name.clone(),
         stops,
+    })
+}
+
+fn get_shape_by_route(
+    route_id: &str,
+    stop_id: Option<&str>,
+    routes: &[Route],
+    trips_by_route: &HashMap<String, Vec<Trip>>,
+    stop_times_by_trip: &HashMap<String, Vec<StopTime>>,
+    shapes_by_id: &HashMap<String, Vec<ShapePoint>>,
+) -> Result<RouteShapeResponse, (StatusCode, String)> {
+    let route = routes
+        .iter()
+        .find(|r| r.route_id == route_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Route '{}' not found", route_id),
+            )
+        })?;
+
+    let trips = trips_by_route.get(route_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("No trips found for route '{}'", route_id),
+        )
+    })?;
+
+    let mut shape_trip_counts: HashMap<String, usize> = HashMap::new();
+    let mut shape_trip_counts_for_stop: HashMap<String, usize> = HashMap::new();
+
+    for trip in trips {
+        *shape_trip_counts.entry(trip.shape_id.clone()).or_insert(0) += 1;
+
+        if let Some(target_stop_id) = stop_id {
+            if let Some(stop_times) = stop_times_by_trip.get(&trip.trip_id) {
+                let has_target_stop = stop_times
+                    .iter()
+                    .any(|stop_time| stop_time.stop_id == target_stop_id);
+                if has_target_stop {
+                    *shape_trip_counts_for_stop
+                        .entry(trip.shape_id.clone())
+                        .or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    let preferred_counts = if shape_trip_counts_for_stop.is_empty() {
+        &shape_trip_counts
+    } else {
+        &shape_trip_counts_for_stop
+    };
+
+    let selected_shape_id = preferred_counts
+        .iter()
+        .max_by(|(shape_a, count_a), (shape_b, count_b)| {
+            count_a
+                .cmp(count_b)
+                .then_with(|| shape_a.cmp(shape_b).reverse())
+        })
+        .map(|(shape_id, _)| shape_id.clone())
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("No shape found for route '{}'", route_id),
+            )
+        })?;
+
+    let shape_points = shapes_by_id.get(&selected_shape_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            format!(
+                "Shape '{}' not found in shapes.txt for route '{}'",
+                selected_shape_id, route_id
+            ),
+        )
+    })?;
+
+    let points = shape_points
+        .iter()
+        .map(|point| ShapePointResponse {
+            lat: point.shape_pt_lat,
+            lon: point.shape_pt_lon,
+            sequence: point.shape_pt_sequence,
+        })
+        .collect();
+
+    Ok(RouteShapeResponse {
+        route_id: route.route_id.clone(),
+        shape_id: selected_shape_id,
+        points,
     })
 }
 
@@ -1355,6 +1505,72 @@ async fn get_route_stops(
             println!("Calling get_route_stops for route_id={}", route_id);
             Ok(Json(response))
         }
+        Err((status, message)) => Err((status, Json(ErrorResponse { error: message }))),
+    }
+}
+
+// Axum handler for /route/:route_id/shape?stop_id={stop_id}
+async fn get_route_shape(
+    Path(route_id): Path<String>,
+    Query(query): Query<RouteShapeQuery>,
+) -> Result<Json<RouteShapeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let routes = match load_routes() {
+        Ok(r) => r,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to load routes: {}", e),
+                }),
+            ));
+        }
+    };
+
+    let trips_by_route = match load_trips() {
+        Ok(t) => t,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to load trips: {}", e),
+                }),
+            ));
+        }
+    };
+
+    let stop_times_by_trip = match load_stop_times() {
+        Ok(st) => st,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to load stop times: {}", e),
+                }),
+            ));
+        }
+    };
+
+    let shapes_by_id = match load_shapes() {
+        Ok(s) => s,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to load shapes: {}", e),
+                }),
+            ));
+        }
+    };
+
+    match get_shape_by_route(
+        &route_id,
+        query.stop_id.as_deref(),
+        &routes,
+        &trips_by_route,
+        &stop_times_by_trip,
+        &shapes_by_id,
+    ) {
+        Ok(response) => Ok(Json(response)),
         Err((status, message)) => Err((status, Json(ErrorResponse { error: message }))),
     }
 }
