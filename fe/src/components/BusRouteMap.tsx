@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect, useRef, useState } from 'react'
 
 type RouteMapStop = {
@@ -28,6 +30,22 @@ type LeafletState = {
   leaflet: LeafletModule
   map: import('leaflet').Map
   layerGroup: import('leaflet').LayerGroup
+}
+
+type PolylineCompatibleStop = {
+  stop_lat: number
+  stop_lon: number
+}
+
+export function resolvePolylinePointsForRendering(
+  stops: PolylineCompatibleStop[],
+  polylinePoints: Array<[number, number]>,
+): Array<[number, number]> {
+  if (polylinePoints.length > 1) {
+    return polylinePoints
+  }
+
+  return stops.map((stop) => [stop.stop_lat, stop.stop_lon] as [number, number])
 }
 
 async function loadLeaflet() {
@@ -134,11 +152,10 @@ function BusRouteMap({
     let disposed = false
 
     const renderLayers = async () => {
-      const fallbackStopPolylinePoints = stops.map(
-        (stop) => [stop.stop_lat, stop.stop_lon] as [number, number],
+      const resolvedPolylinePoints = resolvePolylinePointsForRendering(
+        stops,
+        polylinePoints,
       )
-      const resolvedPolylinePoints =
-        polylinePoints.length > 1 ? polylinePoints : fallbackStopPolylinePoints
       if (resolvedPolylinePoints.length < 2) {
         return
       }
