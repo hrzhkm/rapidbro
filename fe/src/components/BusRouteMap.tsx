@@ -9,6 +9,7 @@ type RouteMapStop = {
 
 type BusRouteMapProps = {
   stops: RouteMapStop[]
+  polylinePoints?: Array<[number, number]>
   currentStopId?: string | null
   targetStopId?: string | null
   className?: string
@@ -29,6 +30,7 @@ async function loadLeaflet() {
 
 function BusRouteMap({
   stops,
+  polylinePoints = [],
   currentStopId = null,
   targetStopId = null,
   className,
@@ -39,7 +41,7 @@ function BusRouteMap({
 
   useEffect(() => {
     hasFitBoundsRef.current = false
-  }, [stops])
+  }, [stops, polylinePoints])
 
   useEffect(() => {
     let disposed = false
@@ -91,7 +93,12 @@ function BusRouteMap({
     let disposed = false
 
     const renderLayers = async () => {
-      if (stops.length < 2) {
+      const fallbackStopPolylinePoints = stops.map(
+        (stop) => [stop.stop_lat, stop.stop_lon] as [number, number],
+      )
+      const resolvedPolylinePoints =
+        polylinePoints.length > 1 ? polylinePoints : fallbackStopPolylinePoints
+      if (resolvedPolylinePoints.length < 2) {
         return
       }
 
@@ -106,12 +113,12 @@ function BusRouteMap({
       }
 
       layerGroup.clearLayers()
-      const latLngs = stops.map((stop) =>
-        leaflet.latLng(stop.stop_lat, stop.stop_lon),
+      const lineLatLngs = resolvedPolylinePoints.map(([lat, lon]) =>
+        leaflet.latLng(lat, lon),
       )
 
       leaflet
-        .polyline(latLngs, {
+        .polyline(lineLatLngs, {
           color: '#d9f99d',
           weight: 6,
           opacity: 0.9,
@@ -134,8 +141,15 @@ function BusRouteMap({
           .addTo(layerGroup)
       })
 
+      const boundsLatLngs =
+        stops.length > 1
+          ? [
+              ...lineLatLngs,
+              ...stops.map((stop) => leaflet.latLng(stop.stop_lat, stop.stop_lon)),
+            ]
+          : lineLatLngs
       if (!hasFitBoundsRef.current) {
-        map.fitBounds(latLngs, { padding: [24, 24], animate: false })
+        map.fitBounds(boundsLatLngs, { padding: [24, 24], animate: false })
         hasFitBoundsRef.current = true
       }
 
@@ -149,9 +163,9 @@ function BusRouteMap({
     return () => {
       disposed = true
     }
-  }, [stops, currentStopId, targetStopId])
+  }, [stops, polylinePoints, currentStopId, targetStopId])
 
-  if (stops.length < 2) {
+  if (stops.length < 2 && polylinePoints.length < 2) {
     return (
       <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
         Route map is unavailable because there are not enough points.

@@ -3,6 +3,10 @@ import { AlertTriangle, LoaderCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
+import {
+  buildRoutePolylinePoints,
+  type RouteShape,
+} from '@/lib/route-geometry'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -61,6 +65,7 @@ function T789Page() {
   const [activeBuses, setActiveBuses] = useState<T789Bus[]>([])
   const [etas, setEtas] = useState<BusEta[]>([])
   const [routeStops, setRouteStops] = useState<RouteStopsResponse | null>(null)
+  const [routeShape, setRouteShape] = useState<RouteShape | null>(null)
   const [stopNameById, setStopNameById] = useState<Record<string, string>>({})
   const [selectedBusNo, setSelectedBusNo] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -84,6 +89,10 @@ function T789Page() {
       ?.sequence ??
     selectedEta?.current_sequence ??
     null
+  const routePolylinePoints = buildRoutePolylinePoints(
+    routeShape,
+    routeStops?.stops,
+  )
   const interactiveCardClassName =
     'block w-full cursor-pointer rounded border p-2 text-left transition-colors outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
 
@@ -170,15 +179,28 @@ function T789Page() {
     }
   }, [apiBaseUrl])
 
+  const fetchT789Shape = useCallback(async () => {
+    const response = await fetch(
+      `${apiBaseUrl}/route/T7890/shape?stop_id=${encodeURIComponent(targetStopId)}`,
+    )
+    if (!response.ok) {
+      return
+    }
+
+    const shapeData = (await response.json()) as RouteShape
+    setRouteShape(shapeData)
+  }, [apiBaseUrl, targetStopId])
+
   useEffect(() => {
     fetchT789Buses()
+    void fetchT789Shape()
 
     const id = setInterval(() => {
       fetchT789Buses()
     }, 15000)
 
     return () => clearInterval(id)
-  }, [fetchT789Buses])
+  }, [fetchT789Buses, fetchT789Shape])
 
   return (
     <main className="mx-auto max-w-4xl p-4 md:p-6">
@@ -318,6 +340,7 @@ function T789Page() {
             {routeStops ? (
               <BusRouteMap
                 stops={routeStops.stops}
+                polylinePoints={routePolylinePoints}
                 currentStopId={selectedCurrentStopId}
                 targetStopId={targetStopId}
               />
@@ -368,6 +391,7 @@ function T789Page() {
               <>
                 <BusRouteMap
                   stops={routeStops.stops}
+                  polylinePoints={routePolylinePoints}
                   currentStopId={selectedCurrentStopId}
                   targetStopId={targetStopId}
                 />

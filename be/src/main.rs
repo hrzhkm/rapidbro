@@ -145,7 +145,7 @@ struct NearestStopResponse {
     distance_meters: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 struct StopRouteSummary {
     route_id: String,
     route_short_name: String,
@@ -181,6 +181,7 @@ struct BusEta {
 struct AppState {
     redis_client: redis::Client,
     ingestor_status: Arc<RwLock<IngestorStatus>>,
+    gtfs_cache: Arc<GtfsCache>,
     bus_ttl_ms: i64,
     stale_after_ms: i64,
 }
@@ -238,11 +239,20 @@ struct RedisBusSnapshot {
     last_ingest_at_unix_ms: Option<i64>,
 }
 
+#[derive(Debug)]
 struct GtfsContext {
     routes: Vec<Route>,
     trips_by_route: HashMap<String, Vec<Trip>>,
     stop_times_by_trip: HashMap<String, Vec<StopTime>>,
     stops_map: HashMap<String, Stop>,
+}
+
+#[derive(Debug)]
+struct GtfsCache {
+    context: GtfsContext,
+    shapes_by_id: HashMap<String, Vec<ShapePoint>>,
+    route_stops_by_route: HashMap<String, RouteStopsResponse>,
+    routes_by_stop: HashMap<String, Vec<StopRouteSummary>>,
 }
 
 const SOCKET_URL: &str = "https://rapidbus-socketio-avl.prasarana.com.my";
@@ -253,6 +263,64 @@ const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1:6379/";
 const DEFAULT_BUS_TTL_SECONDS: i64 = 120;
 const DEFAULT_STALE_AFTER_SECONDS: i64 = 20;
 const PANTAI_HILLPARK_PHASE_5_STOP_ID: &str = "1008485";
+
+impl GtfsCache {
+    fn build() -> Result<Self, Box<dyn std::error::Error>> {
+        let context = GtfsContext {
+            routes: load_routes()?,
+            trips_by_route: load_trips()?,
+            stop_times_by_trip: load_stop_times()?,
+            stops_map: load_stops()?,
+        };
+        let shapes_by_id = load_shapes()?;
+        let mut route_stops_by_route: HashMap<String, RouteStopsResponse> = HashMap::new();
+
+        for route in &context.routes {
+            if let Ok(route_stops) = get_stops_by_route(
+                &route.route_id,
+                &context.routes,
+                &context.trips_by_route,
+                &context.stop_times_by_trip,
+                &context.stops_map,
+            ) {
+                route_stops_by_route.insert(route.route_id.clone(), route_stops);
+            }
+        }
+
+        let mut routes_by_stop: HashMap<String, Vec<StopRouteSummary>> = HashMap::new();
+        for route_stops in route_stops_by_route.values() {
+            let route_summary = StopRouteSummary {
+                route_id: route_stops.route_id.clone(),
+                route_short_name: route_stops.route_short_name.clone(),
+                route_long_name: route_stops.route_long_name.clone(),
+            };
+            let mut seen_stop_ids: HashSet<String> = HashSet::new();
+            for stop in &route_stops.stops {
+                if seen_stop_ids.insert(stop.stop_id.clone()) {
+                    routes_by_stop
+                        .entry(stop.stop_id.clone())
+                        .or_default()
+                        .push(route_summary.clone());
+                }
+            }
+        }
+
+        for route_summaries in routes_by_stop.values_mut() {
+            route_summaries.sort_by(|a, b| {
+                a.route_short_name
+                    .cmp(&b.route_short_name)
+                    .then(a.route_id.cmp(&b.route_id))
+            });
+        }
+
+        Ok(Self {
+            context,
+            shapes_by_id,
+            route_stops_by_route,
+            routes_by_stop,
+        })
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -287,6 +355,10 @@ async fn main() {
         .query_async(&mut redis_conn)
         .await
         .unwrap_or_else(|error| panic!("Failed to ping Redis '{}': {}", redis_url, error));
+    let gtfs_cache = Arc::new(
+        GtfsCache::build()
+            .unwrap_or_else(|error| panic!("Failed to build GTFS cache at startup: {}", error)),
+    );
 
     let app_state = AppState {
         redis_client: redis_client.clone(),
@@ -300,6 +372,7 @@ async fn main() {
             last_message_unix_ms: None,
             last_error: None,
         })),
+        gtfs_cache,
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
     };
@@ -790,8 +863,9 @@ async fn get_pantai_hillpark_phase_5_eta(
     State(state): State<AppState>,
 ) -> Result<Json<StopIncomingResponse>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(&state).await?;
-    let gtfs = load_gtfs_context()?;
-    let stop = gtfs
+    let stop = state
+        .gtfs_cache
+        .context
         .stops_map
         .get(PANTAI_HILLPARK_PHASE_5_STOP_ID)
         .ok_or_else(|| {
@@ -805,8 +879,11 @@ async fn get_pantai_hillpark_phase_5_eta(
                 }),
             )
         })?;
-    let eta_results =
-        calculate_stop_eta_from_snapshot(&snapshot, &gtfs, PANTAI_HILLPARK_PHASE_5_STOP_ID);
+    let eta_results = calculate_stop_eta_from_snapshot(
+        &snapshot,
+        state.gtfs_cache.as_ref(),
+        PANTAI_HILLPARK_PHASE_5_STOP_ID,
+    );
     let now_ms = now_unix_ms();
     let is_stale = match snapshot.last_ingest_at_unix_ms {
         Some(last_ingest_ms) => now_ms - last_ingest_ms > state.stale_after_ms,
@@ -856,8 +933,8 @@ async fn get_stop_eta(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<BusEta>>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(&state).await?;
-    let gtfs = load_gtfs_context()?;
-    let all_eta_results = calculate_stop_eta_from_snapshot(&snapshot, &gtfs, &stop_id);
+    let all_eta_results =
+        calculate_stop_eta_from_snapshot(&snapshot, state.gtfs_cache.as_ref(), &stop_id);
 
     println!(
         "Calling get_stop_eta for stop_id={}: {} incoming buses",
@@ -869,16 +946,10 @@ async fn get_stop_eta(
 
 async fn get_stop_routes(
     Path(stop_id): Path<String>,
+    State(state): State<AppState>,
 ) -> Result<Json<StopRoutesResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let gtfs = load_gtfs_context()?;
-    let routes = get_routes_for_stop(
-        &stop_id,
-        &gtfs.routes,
-        &gtfs.trips_by_route,
-        &gtfs.stop_times_by_trip,
-        &gtfs.stops_map,
-    )
-    .map_err(|(status, message)| (status, Json(ErrorResponse { error: message })))?;
+    let routes = get_routes_for_stop_from_cache(&stop_id, state.gtfs_cache.as_ref())
+        .map_err(|(status, message)| (status, Json(ErrorResponse { error: message })))?;
 
     println!(
         "Calling get_stop_routes for stop_id={}: {} routes",
@@ -891,33 +962,22 @@ async fn get_stop_routes(
 
 fn calculate_stop_eta_from_snapshot(
     snapshot: &RedisBusSnapshot,
-    gtfs: &GtfsContext,
+    gtfs: &GtfsCache,
     stop_id: &str,
 ) -> Vec<BusEta> {
     let mut all_eta_results: Vec<BusEta> = Vec::new();
     let mut seen_bus_route: HashSet<String> = HashSet::new();
 
-    for route in &gtfs.routes {
-        let route_stops = match get_stops_by_route(
-            &route.route_id,
-            &gtfs.routes,
-            &gtfs.trips_by_route,
-            &gtfs.stop_times_by_trip,
-            &gtfs.stops_map,
-        ) {
-            Ok(stops) => stops,
-            Err(_) => continue,
-        };
-
+    for route_stops in gtfs.route_stops_by_route.values() {
         if !route_stops.stops.iter().any(|stop| stop.stop_id == stop_id) {
             continue;
         }
 
         let route_eta_results = match calculate_route_eta_from_stops(
             &snapshot.buses,
-            &route.route_id,
+            &route_stops.route_id,
             stop_id,
-            &route_stops,
+            route_stops,
         ) {
             Ok(results) => results,
             Err(_) => continue,
@@ -946,15 +1006,8 @@ async fn calculate_route_eta(
     target_stop_id: &str,
 ) -> Result<Vec<BusEta>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(state).await?;
-    let gtfs = load_gtfs_context()?;
-    let route_stops = get_stops_by_route(
-        route_id,
-        &gtfs.routes,
-        &gtfs.trips_by_route,
-        &gtfs.stop_times_by_trip,
-        &gtfs.stops_map,
-    )
-    .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
+    let route_stops = get_route_stops_from_cache(route_id, state.gtfs_cache.as_ref())
+        .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
 
     calculate_route_eta_from_stops(&snapshot.buses, route_id, target_stop_id, &route_stops).map_err(
         |message| {
@@ -1056,95 +1109,38 @@ fn calculate_route_eta_from_stops(
     Ok(eta_results)
 }
 
-fn load_gtfs_context() -> Result<GtfsContext, (StatusCode, Json<ErrorResponse>)> {
-    let routes = load_routes().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to load routes: {}", e),
-            }),
-        )
-    })?;
-
-    let trips_by_route = load_trips().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to load trips: {}", e),
-            }),
-        )
-    })?;
-
-    let stop_times_by_trip = load_stop_times().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to load stop times: {}", e),
-            }),
-        )
-    })?;
-
-    let stops_map = load_stops().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to load stops: {}", e),
-            }),
-        )
-    })?;
-
-    Ok(GtfsContext {
-        routes,
-        trips_by_route,
-        stop_times_by_trip,
-        stops_map,
-    })
+fn get_route_stops_from_cache(
+    route_id: &str,
+    gtfs_cache: &GtfsCache,
+) -> Result<RouteStopsResponse, (StatusCode, String)> {
+    gtfs_cache
+        .route_stops_by_route
+        .get(route_id)
+        .cloned()
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Route '{}' not found", route_id),
+            )
+        })
 }
 
-fn get_routes_for_stop(
+fn get_routes_for_stop_from_cache(
     stop_id: &str,
-    routes: &[Route],
-    trips_by_route: &HashMap<String, Vec<Trip>>,
-    stop_times_by_trip: &HashMap<String, Vec<StopTime>>,
-    stops_map: &HashMap<String, Stop>,
+    gtfs_cache: &GtfsCache,
 ) -> Result<Vec<StopRouteSummary>, (StatusCode, String)> {
-    if !stops_map.contains_key(stop_id) {
+    if !gtfs_cache.context.stops_map.contains_key(stop_id) {
         return Err((
             StatusCode::NOT_FOUND,
             format!("Stop '{}' not found", stop_id),
         ));
     }
 
-    let mut stop_routes: Vec<StopRouteSummary> = routes
-        .iter()
-        .filter_map(|route| {
-            let route_stops = get_stops_by_route(
-                &route.route_id,
-                routes,
-                trips_by_route,
-                stop_times_by_trip,
-                stops_map,
-            )
-            .ok()?;
-
-            route_stops
-                .stops
-                .iter()
-                .any(|stop| stop.stop_id == stop_id)
-                .then(|| StopRouteSummary {
-                    route_id: route.route_id.clone(),
-                    route_short_name: route.route_short_name.clone(),
-                    route_long_name: route.route_long_name.clone(),
-                })
-        })
-        .collect();
-
-    stop_routes.sort_by(|a, b| {
-        a.route_short_name
-            .cmp(&b.route_short_name)
-            .then(a.route_id.cmp(&b.route_id))
-    });
-
+    let stop_routes = gtfs_cache
+        .routes_by_stop
+        .get(stop_id)
+        .cloned()
+        .unwrap_or_default();
     if stop_routes.is_empty() {
         return Err((
             StatusCode::NOT_FOUND,
@@ -1444,63 +1440,9 @@ fn get_shape_by_route(
 // Axum handler for /route/:route_id/stops
 async fn get_route_stops(
     Path(route_id): Path<String>,
+    State(state): State<AppState>,
 ) -> Result<Json<RouteStopsResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Load GTFS data
-    let routes = match load_routes() {
-        Ok(r) => r,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load routes: {}", e),
-                }),
-            ));
-        }
-    };
-
-    let trips_by_route = match load_trips() {
-        Ok(t) => t,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load trips: {}", e),
-                }),
-            ));
-        }
-    };
-
-    let stop_times_by_trip = match load_stop_times() {
-        Ok(st) => st,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load stop times: {}", e),
-                }),
-            ));
-        }
-    };
-
-    let stops_map = match load_stops() {
-        Ok(s) => s,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load stops: {}", e),
-                }),
-            ));
-        }
-    };
-
-    match get_stops_by_route(
-        &route_id,
-        &routes,
-        &trips_by_route,
-        &stop_times_by_trip,
-        &stops_map,
-    ) {
+    match get_route_stops_from_cache(&route_id, state.gtfs_cache.as_ref()) {
         Ok(response) => {
             println!("Calling get_route_stops for route_id={}", route_id);
             Ok(Json(response))
@@ -1513,62 +1455,15 @@ async fn get_route_stops(
 async fn get_route_shape(
     Path(route_id): Path<String>,
     Query(query): Query<RouteShapeQuery>,
+    State(state): State<AppState>,
 ) -> Result<Json<RouteShapeResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let routes = match load_routes() {
-        Ok(r) => r,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load routes: {}", e),
-                }),
-            ));
-        }
-    };
-
-    let trips_by_route = match load_trips() {
-        Ok(t) => t,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load trips: {}", e),
-                }),
-            ));
-        }
-    };
-
-    let stop_times_by_trip = match load_stop_times() {
-        Ok(st) => st,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load stop times: {}", e),
-                }),
-            ));
-        }
-    };
-
-    let shapes_by_id = match load_shapes() {
-        Ok(s) => s,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to load shapes: {}", e),
-                }),
-            ));
-        }
-    };
-
     match get_shape_by_route(
         &route_id,
         query.stop_id.as_deref(),
-        &routes,
-        &trips_by_route,
-        &stop_times_by_trip,
-        &shapes_by_id,
+        &state.gtfs_cache.context.routes,
+        &state.gtfs_cache.context.trips_by_route,
+        &state.gtfs_cache.context.stop_times_by_trip,
+        &state.gtfs_cache.shapes_by_id,
     ) {
         Ok(response) => Ok(Json(response)),
         Err((status, message)) => Err((status, Json(ErrorResponse { error: message }))),
@@ -1578,6 +1473,7 @@ async fn get_route_shape(
 // Axum handler for /stops/nearest?lat={lat}&lon={lon}
 async fn get_nearest_stop(
     Query(query): Query<NearestStopQuery>,
+    State(state): State<AppState>,
 ) -> Result<Json<NearestStopResponse>, (StatusCode, Json<ErrorResponse>)> {
     if !(-90.0..=90.0).contains(&query.lat) || !(-180.0..=180.0).contains(&query.lon) {
         return Err((
@@ -1588,16 +1484,10 @@ async fn get_nearest_stop(
         ));
     }
 
-    let stops_map = load_stops().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to load stops: {}", e),
-            }),
-        )
-    })?;
-
-    let nearest_stop = stops_map
+    let nearest_stop = state
+        .gtfs_cache
+        .context
+        .stops_map
         .values()
         .map(|stop| {
             let distance_km =
@@ -1634,4 +1524,53 @@ async fn get_nearest_stop(
         query.lat, query.lon, response.stop_id
     );
     Ok(Json(response))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gtfs_cache_builds_with_expected_indexes() {
+        let cache = GtfsCache::build().expect("cache should build from GTFS files");
+
+        assert!(
+            cache.route_stops_by_route.contains_key("T7890"),
+            "expected T7890 route to be indexed"
+        );
+        assert!(
+            cache.context.stops_map.contains_key("1000838"),
+            "expected stop 1000838 to exist"
+        );
+    }
+
+    #[test]
+    fn route_stops_from_cache_are_sequence_sorted() {
+        let cache = GtfsCache::build().expect("cache should build from GTFS files");
+        let route = get_route_stops_from_cache("T7890", &cache)
+            .expect("T7890 route stops should be available");
+
+        assert!(!route.stops.is_empty(), "route should include stops");
+        let mut last_seq = 0;
+        for stop in route.stops {
+            assert!(stop.sequence >= last_seq, "stop sequences must be sorted");
+            last_seq = stop.sequence;
+        }
+    }
+
+    #[test]
+    fn routes_for_stop_from_cache_returns_sorted_summaries() {
+        let cache = GtfsCache::build().expect("cache should build from GTFS files");
+        let routes = get_routes_for_stop_from_cache("1000838", &cache)
+            .expect("routes for stop 1000838 should be available");
+
+        assert!(!routes.is_empty(), "stop should have at least one route");
+        let mut sorted = routes.clone();
+        sorted.sort_by(|a, b| {
+            a.route_short_name
+                .cmp(&b.route_short_name)
+                .then(a.route_id.cmp(&b.route_id))
+        });
+        assert_eq!(routes, sorted, "routes must be stable-sorted");
+    }
 }

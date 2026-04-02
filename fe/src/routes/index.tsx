@@ -3,6 +3,11 @@ import { AlertTriangle, LoaderCircle, LocateFixed, MapPin } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
+import { getGeolocationPosition } from '@/lib/geolocation'
+import {
+  buildRoutePolylinePoints,
+  type RouteShape,
+} from '@/lib/route-geometry'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -85,6 +90,9 @@ function App() {
   const [routeStopsByRoute, setRouteStopsByRoute] = useState<
     Record<string, RouteStopsResponse>
   >({})
+  const [routeShapesByKey, setRouteShapesByKey] = useState<
+    Record<string, RouteShape>
+  >({})
   const [selectedMapRouteId, setSelectedMapRouteId] = useState<string | null>(
     null,
   )
@@ -116,6 +124,26 @@ function App() {
   const selectedMapRouteStops = selectedMapRouteId
     ? routeStopsByRoute[selectedMapRouteId] ?? null
     : null
+  const getRouteShapeCacheKey = (routeId: string, stopId?: string | null) =>
+    stopId ? `${routeId}::${stopId}` : routeId
+  const getRouteShape = (routeId: string, stopId?: string | null) =>
+    routeShapesByKey[getRouteShapeCacheKey(routeId, stopId)] ??
+    routeShapesByKey[routeId] ??
+    null
+  const selectedMapRouteShape = selectedMapRouteId
+    ? getRouteShape(selectedMapRouteId, nearestStop?.stop_id)
+    : null
+  const selectedRouteShape = selectedBus
+    ? getRouteShape(selectedBus.route_id, nearestStop?.stop_id)
+    : null
+  const selectedMapRoutePolylinePoints = buildRoutePolylinePoints(
+    selectedMapRouteShape,
+    selectedMapRouteStops?.stops,
+  )
+  const selectedRoutePolylinePoints = buildRoutePolylinePoints(
+    selectedRouteShape,
+    selectedRouteStops?.stops,
+  )
 
   const fetchNearestStop = async (lat: number, lon: number) => {
     const params = new URLSearchParams({
@@ -191,7 +219,8 @@ function App() {
       setSelectedMapRouteId(initialRouteId)
 
       if (initialRouteId) {
-        await fetchRouteStops(initialRouteId)
+        void fetchRouteStops(initialRouteId)
+        void fetchRouteShape(initialRouteId, stopId)
       }
     } catch (error) {
       setRouteErrorMessage(
@@ -240,17 +269,49 @@ function App() {
     }
   }
 
+  const fetchRouteShape = async (routeId: string, stopId?: string | null) => {
+    const cacheKey = getRouteShapeCacheKey(routeId, stopId)
+    if (routeShapesByKey[cacheKey]) {
+      return routeShapesByKey[cacheKey]
+    }
+
+    const params = stopId ? `?stop_id=${encodeURIComponent(stopId)}` : ''
+    const response = await fetch(
+      `${apiBaseUrl}/route/${encodeURIComponent(routeId)}/shape${params}`,
+    )
+    if (!response.ok) {
+      const fallbackMessage = 'Unable to fetch route shape'
+      const body = (await response.json().catch(() => null)) as {
+        error?: string
+      } | null
+      throw new Error(body?.error ?? fallbackMessage)
+    }
+
+    const data = (await response.json()) as RouteShape
+    setRouteShapesByKey((current) => ({
+      ...current,
+      [cacheKey]: data,
+    }))
+    return data
+  }
+
   const handleSelectBus = async (eta: BusEta) => {
     setSelectedBusKey(getBusKey(eta))
     setSelectedMapRouteId(eta.route_id)
     setSelectedRouteErrorMessage(null)
 
-    if (routeStopsByRoute[eta.route_id]) {
+    if (
+      routeStopsByRoute[eta.route_id] &&
+      getRouteShape(eta.route_id, nearestStop?.stop_id)
+    ) {
       return
     }
 
     try {
-      await fetchRouteStops(eta.route_id)
+      await Promise.all([
+        fetchRouteStops(eta.route_id),
+        fetchRouteShape(eta.route_id, nearestStop?.stop_id),
+      ])
     } catch {
       // Error state is handled above so the selected bus card can still render.
     }
@@ -260,18 +321,21 @@ function App() {
     setSelectedMapRouteId(routeId)
     setSelectedRouteErrorMessage(null)
 
-    if (routeStopsByRoute[routeId]) {
+    if (routeStopsByRoute[routeId] && getRouteShape(routeId, nearestStop?.stop_id)) {
       return
     }
 
     try {
-      await fetchRouteStops(routeId)
+      await Promise.all([
+        fetchRouteStops(routeId),
+        fetchRouteShape(routeId, nearestStop?.stop_id),
+      ])
     } catch {
       // Map route error is shown via selectedRouteErrorMessage.
     }
   }
 
-  const handleFindNearestStop = ({
+  const handleFindNearestStop = async ({
     preserveCurrentData = false,
   }: {
     preserveCurrentData?: boolean
@@ -282,12 +346,6 @@ function App() {
     setSelectedRouteErrorMessage(null)
 
     if (!preserveCurrentData) {
-      setNearestStop(null)
-      setNearestStopEta([])
-      setStopRoutes([])
-      setRouteStopsByRoute({})
-      setSelectedMapRouteId(null)
-      setSelectedBusKey(null)
       setIsLoading(true)
     }
 
@@ -299,43 +357,29 @@ function App() {
       return
     }
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude
-        const lon = position.coords.longitude
-        setCoords({ lat, lon })
+    try {
+      const position = await getGeolocationPosition(navigator.geolocation)
+      const lat = position.coords.latitude
+      const lon = position.coords.longitude
+      setCoords({ lat, lon })
 
-        try {
-          const nearestStopData = await fetchNearestStop(lat, lon)
-          await Promise.all([
-            fetchEtaToStop(nearestStopData.stop_id),
-            fetchRoutesForStop(nearestStopData.stop_id),
-          ])
-          setLastFetchedAt(new Date())
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : 'Unable to fetch nearest bus stop',
-          )
-        } finally {
-          if (!preserveCurrentData) {
-            setIsLoading(false)
-          }
-        }
-      },
-      (error) => {
-        if (!preserveCurrentData) {
-          setIsLoading(false)
-        }
-        setErrorMessage(error.message || 'Unable to read your location.')
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 30000,
-      },
-    )
+      const nearestStopData = await fetchNearestStop(lat, lon)
+      await Promise.all([
+        fetchEtaToStop(nearestStopData.stop_id),
+        fetchRoutesForStop(nearestStopData.stop_id),
+      ])
+      setLastFetchedAt(new Date())
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to read your location.',
+      )
+    } finally {
+      if (!preserveCurrentData) {
+        setIsLoading(false)
+      }
+    }
   }
 
   useEffect(() => {
@@ -505,6 +549,7 @@ function App() {
                   <div className="mt-2">
                     <BusRouteMap
                       stops={selectedMapRouteStops.stops}
+                      polylinePoints={selectedMapRoutePolylinePoints}
                       currentStopId={
                         selectedBus?.route_id === selectedMapRouteId
                           ? selectedBus.current_stop_id
@@ -633,6 +678,7 @@ function App() {
               <>
                 <BusRouteMap
                   stops={selectedRouteStops.stops}
+                  polylinePoints={selectedRoutePolylinePoints}
                   currentStopId={selectedBus.current_stop_id}
                   targetStopId={nearestStop?.stop_id ?? null}
                 />
