@@ -127,7 +127,7 @@ function BusRouteMap({
       leaflet
         .polyline(lineLatLngs, {
           color: '#0f172a',
-          weight: 10,
+          weight: 8,
           opacity: 0.85,
           lineCap: 'round',
           lineJoin: 'round',
@@ -137,7 +137,7 @@ function BusRouteMap({
       leaflet
         .polyline(lineLatLngs, {
           color: '#06b6d4',
-          weight: 6,
+          weight: 4,
           opacity: 0.95,
           lineCap: 'round',
           lineJoin: 'round',
