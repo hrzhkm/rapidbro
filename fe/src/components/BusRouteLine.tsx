@@ -33,7 +33,7 @@ function BusRouteLine({
     stops.find((stop) => stop.stop_id === targetStopId)?.sequence ?? null
 
   return (
-    <div className="rounded-md border bg-muted/20 p-3">
+    <div className="rounded-md border bg-amber-50/40 p-3">
       {routeShortName || routeLongName ? (
         <div className="mb-4 rounded-md border bg-background p-3">
           {routeShortName ? (
@@ -63,6 +63,25 @@ function BusRouteLine({
             resolvedCurrentSequence !== null &&
             stop.sequence > resolvedCurrentSequence
 
+          const markerClassName = isCurrentStop
+            ? 'border-amber-900 bg-amber-500 ring-amber-200'
+            : isTargetStop
+              ? 'border-orange-800 bg-orange-500 ring-orange-200'
+              : isPassed
+                ? 'border-lime-800 bg-lime-500 ring-lime-100'
+                : isBetweenCurrentAndTarget
+                  ? 'border-lime-900 bg-lime-400 ring-lime-200'
+                  : isUpcoming
+                    ? 'border-amber-400 bg-amber-200 ring-amber-100'
+                    : 'border-border bg-background ring-background'
+          const lineInnerClassName = isPassed
+            ? 'bg-lime-500'
+            : isBetweenCurrentAndTarget
+              ? 'bg-amber-300'
+              : isUpcoming
+                ? 'bg-amber-200'
+                : 'bg-border'
+
           return (
             <div
               key={stop.stop_id}
@@ -70,26 +89,15 @@ function BusRouteLine({
             >
               <div className="flex flex-col items-center">
                 <div
-                  className={`h-3 w-3 rounded-full border-2 ${
-                    isCurrentStop
-                      ? 'border-foreground bg-foreground'
-                      : isTargetStop
-                        ? 'border-primary bg-background'
-                        : isPassed
-                          ? 'border-muted-foreground bg-muted-foreground'
-                          : isBetweenCurrentAndTarget
-                            ? 'border-primary bg-primary'
-                            : isUpcoming
-                              ? 'border-border bg-accent'
-                              : 'border-border bg-background'
-                  }`}
+                  className={`h-4 w-4 rounded-full border-[3px] shadow-sm ring-2 ${markerClassName}`}
                 />
                 {index < stops.length - 1 ? (
-                  <div
-                    className={`min-h-8 w-px flex-1 ${
-                      isPassed ? 'bg-muted-foreground' : 'bg-border'
-                    }`}
-                  />
+                  <div className="relative min-h-8 w-3 flex-1">
+                    <div className="absolute inset-y-0 left-1/2 w-[6px] -translate-x-1/2 rounded-full bg-amber-700/70" />
+                    <div
+                      className={`absolute inset-y-[1px] left-1/2 w-[3px] -translate-x-1/2 rounded-full ${lineInnerClassName}`}
+                    />
+                  </div>
                 ) : null}
               </div>
 

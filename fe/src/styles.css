@@ -61,68 +61,61 @@
   }
 }
 
-.t789-map {
+.bus-route-map {
   height: 22rem;
   width: 100%;
   background: radial-gradient(
-    circle at top,
-    oklch(0.99 0.01 100),
-    oklch(0.95 0.015 220)
+    circle at 20% 20%,
+    rgba(255, 255, 255, 0.95),
+    rgba(254, 243, 199, 0.55) 42%,
+    rgba(254, 215, 170, 0.35) 100%
   );
 }
 
-.t789-map .leaflet-container {
+.bus-route-map .leaflet-container {
   height: 100%;
   width: 100%;
   border-radius: inherit;
   font: inherit;
 }
 
-.t789-map .leaflet-control-attribution {
+.bus-route-map .leaflet-control-attribution {
   font-size: 0.625rem;
 }
 
-.t789-route-arrow-icon {
+.bus-live-marker-icon {
   background: transparent;
   border: 0;
 }
 
-.t789-route-arrow {
-  height: 1rem;
-  width: 1rem;
-  background: oklch(0.24 0.08 200 / 0.88);
-  clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%);
-  box-shadow: 0 2px 6px oklch(0.16 0.03 220 / 0.2);
-}
-
-.t789-bus-icon {
-  background: transparent;
-  border: 0;
-}
-
-.t789-bus-marker {
+.bus-live-marker {
   display: inline-flex;
-  height: 2.125rem;
-  width: 2.125rem;
+  height: 2.75rem;
+  width: 2.75rem;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 2px solid oklch(0.24 0.06 200 / 0.18);
-  background: oklch(0.99 0.01 100 / 0.96);
-  color: oklch(0.22 0.03 220);
-  box-shadow: 0 10px 24px oklch(0.2 0.02 220 / 0.16);
-}
-
-.t789-bus-marker.is-selected {
-  border-color: oklch(0.61 0.18 30);
-  background: oklch(0.72 0.16 40 / 0.2);
+  border: 2px solid rgba(15, 23, 42, 0.8);
+  background: linear-gradient(145deg, #fef9c3 0%, #fde68a 100%);
   box-shadow:
-    0 0 0 4px oklch(0.72 0.16 40 / 0.18),
-    0 10px 24px oklch(0.2 0.02 220 / 0.2);
+    0 8px 18px rgba(0, 0, 0, 0.25),
+    0 0 0 2px rgba(255, 255, 255, 0.75);
+  transform: scale(var(--bus-marker-scale, 1));
+  transform-origin: center;
+  transition: transform 120ms ease-out;
 }
 
-.t789-bus-marker-image {
-  height: 1.2rem;
-  width: 1.2rem;
+.bus-live-marker.is-selected {
+  border-color: #9a3412;
+  box-shadow:
+    0 0 0 4px rgba(249, 115, 22, 0.35),
+    0 10px 22px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(145deg, #ffedd5 0%, #fdba74 100%);
+}
+
+.bus-live-marker-image {
+  height: 1.5rem;
+  width: 1.5rem;
+  object-fit: contain;
   display: block;
 }

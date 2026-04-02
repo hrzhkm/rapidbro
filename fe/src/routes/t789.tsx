@@ -1,8 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, LoaderCircle, RefreshCw } from 'lucide-react'
-import type { LayerGroup, Map as LeafletMap } from 'leaflet'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
+import {
+  buildRoutePolylinePoints,
+  type RouteShape,
+} from '@/lib/route-geometry'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -24,19 +28,13 @@ type T789Bus = {
   longitude: number
   speed: number
   busstop_id?: string | null
-  resolved_stop_id?: string | null
-  resolved_stop_name?: string | null
-  resolved_stop_sequence?: number | null
-  stop_resolution_source?: 'live' | 'derived' | null
 }
 
 type BusEta = {
   route_id?: string
   bus_no: string
   current_stop_id: string
-  current_stop_name: string
   current_sequence?: number
-  stop_resolution_source: 'live' | 'derived'
   stops_away: number
   distance_km: number
   speed_kmh: number
@@ -57,314 +55,6 @@ type RouteStopsResponse = {
   }>
 }
 
-type RouteShapeResponse = {
-  route_id: string
-  shape_id: string
-  points: Array<{
-    lat: number
-    lon: number
-    sequence: number
-  }>
-}
-
-type T789RouteMapProps = {
-  activeBuses: T789Bus[]
-  routeStops: RouteStopsResponse | null
-  routeShape: RouteShapeResponse | null
-  selectedBusNo: string | null
-  targetStopId: string
-  onSelectBus: (busNo: string) => void
-}
-
-type RoutePoint = [number, number]
-
-function escapeLeafletHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-}
-
-function getBearingDegrees(
-  [startLat, startLon]: RoutePoint,
-  [endLat, endLon]: RoutePoint,
-) {
-  const startLatRad = (startLat * Math.PI) / 180
-  const endLatRad = (endLat * Math.PI) / 180
-  const deltaLonRad = ((endLon - startLon) * Math.PI) / 180
-
-  const y = Math.sin(deltaLonRad) * Math.cos(endLatRad)
-  const x =
-    Math.cos(startLatRad) * Math.sin(endLatRad) -
-    Math.sin(startLatRad) * Math.cos(endLatRad) * Math.cos(deltaLonRad)
-
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
-}
-
-function getRouteArrows(routePath: RoutePoint[]) {
-  if (routePath.length < 3) {
-    return []
-  }
-
-  const targetArrowCount = 8
-  const step = Math.max(10, Math.floor(routePath.length / targetArrowCount))
-  const arrows: Array<{ point: RoutePoint; bearing: number; key: string }> = []
-
-  for (let index = step; index < routePath.length - 1; index += step) {
-    const previousPoint = routePath[index - 1]
-    const nextPoint = routePath[index + 1]
-
-    arrows.push({
-      point: routePath[index],
-      bearing: getBearingDegrees(previousPoint, nextPoint),
-      key: `${routePath[index][0]}:${routePath[index][1]}:${index}`,
-    })
-  }
-
-  return arrows
-}
-
-function T789RouteMap({
-  activeBuses,
-  routeStops,
-  routeShape,
-  selectedBusNo,
-  targetStopId,
-  onSelectBus,
-}: T789RouteMapProps) {
-  const mapContainerRef = useRef<HTMLDivElement | null>(null)
-  const mapRef = useRef<LeafletMap | null>(null)
-  const overlayLayerRef = useRef<LayerGroup | null>(null)
-  const hasAutoFitRef = useRef(false)
-  const lastSelectedBusNoRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    let isDisposed = false
-
-    const setupMap = async () => {
-      if (
-        isDisposed ||
-        typeof window === 'undefined' ||
-        !mapContainerRef.current ||
-        mapRef.current
-      ) {
-        return
-      }
-
-      const L = await import('leaflet')
-
-      if (isDisposed || !mapContainerRef.current || mapRef.current) {
-        return
-      }
-
-      const map = L.map(mapContainerRef.current, {
-        zoomControl: true,
-        attributionControl: true,
-      })
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-      }).addTo(map)
-
-      mapRef.current = map
-      overlayLayerRef.current = L.layerGroup().addTo(map)
-      requestAnimationFrame(() => {
-        map.invalidateSize()
-      })
-    }
-
-    void setupMap()
-
-    return () => {
-      isDisposed = true
-      overlayLayerRef.current?.clearLayers()
-      mapRef.current?.remove()
-      overlayLayerRef.current = null
-      mapRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    let isDisposed = false
-
-    const syncMap = async () => {
-      if (!mapRef.current) {
-        return
-      }
-
-      const L = await import('leaflet')
-
-      if (isDisposed || !mapRef.current) {
-        return
-      }
-
-      const map = mapRef.current
-      const overlayLayer = overlayLayerRef.current ?? L.layerGroup().addTo(map)
-
-      overlayLayerRef.current = overlayLayer
-      overlayLayer.clearLayers()
-
-      const points: Array<[number, number]> = []
-      const stops = routeStops?.stops ?? []
-      const shapePoints = routeShape?.points ?? []
-      const targetStop =
-        stops.find((stop) => stop.stop_id === targetStopId) ?? null
-      let routePath: RoutePoint[] = []
-
-      if (shapePoints.length > 1) {
-        routePath = shapePoints.map(
-          (point) => [point.lat, point.lon] as [number, number],
-        )
-        routePath.forEach((point) => points.push(point))
-
-        L.polyline(routePath, {
-          color: '#0f766e',
-          weight: 5,
-          opacity: 0.9,
-        }).addTo(overlayLayer)
-      } else if (stops.length > 1) {
-        routePath = stops.map(
-          (stop) => [stop.stop_lat, stop.stop_lon] as [number, number],
-        )
-        routePath.forEach((point) => points.push(point))
-
-        L.polyline(routePath, {
-          color: '#0f766e',
-          weight: 4,
-          opacity: 0.8,
-        }).addTo(overlayLayer)
-      }
-
-      getRouteArrows(routePath).forEach((arrow) => {
-        L.marker(arrow.point, {
-          interactive: false,
-          keyboard: false,
-          icon: L.divIcon({
-            className: 't789-route-arrow-icon',
-            html: `<div class="t789-route-arrow" style="transform: rotate(${arrow.bearing}deg)"></div>`,
-            iconSize: [18, 18],
-            iconAnchor: [9, 9],
-          }),
-        }).addTo(overlayLayer)
-      })
-
-      stops.forEach((stop) => {
-        const isTargetStop = stop.stop_id === targetStopId
-
-        points.push([stop.stop_lat, stop.stop_lon])
-
-        L.circleMarker([stop.stop_lat, stop.stop_lon], {
-          radius: isTargetStop ? 7 : 4,
-          color: isTargetStop ? '#b45309' : '#475569',
-          weight: 2,
-          fillColor: isTargetStop ? '#f59e0b' : '#f8fafc',
-          fillOpacity: 0.95,
-        })
-          .bindTooltip(
-            isTargetStop
-              ? `${stop.stop_name} (KL Gateway target)`
-              : stop.stop_name,
-          )
-          .addTo(overlayLayer)
-      })
-
-      activeBuses.forEach((bus) => {
-        const isSelected = bus.bus_no === selectedBusNo
-        const currentStopLabel =
-          bus.resolved_stop_name ??
-          bus.resolved_stop_id ??
-          bus.busstop_id ??
-          'Unknown'
-
-        points.push([bus.latitude, bus.longitude])
-
-        const marker = L.marker([bus.latitude, bus.longitude], {
-          icon: L.divIcon({
-            className: 't789-bus-icon',
-            html: `<div class="t789-bus-marker${isSelected ? ' is-selected' : ''}"><img src="/bus-icon.svg" alt="" class="t789-bus-marker-image" /></div>`,
-            iconSize: [34, 34],
-            iconAnchor: [17, 17],
-          }),
-          title: `Bus ${bus.bus_no}`,
-        })
-
-        marker.on('click', () => {
-          onSelectBus(bus.bus_no)
-        })
-
-        marker
-          .bindTooltip(
-            `<strong>Bus ${escapeLeafletHtml(bus.bus_no)}</strong><br/>Speed: ${bus.speed.toFixed(1)} km/h<br/>Current stop: ${escapeLeafletHtml(currentStopLabel)}`,
-          )
-          .bindPopup(
-            `<strong>Bus ${escapeLeafletHtml(bus.bus_no)}</strong><br/>Speed: ${bus.speed.toFixed(1)} km/h<br/>Current stop: ${escapeLeafletHtml(currentStopLabel)}`,
-          )
-          .addTo(overlayLayer)
-      })
-
-      if (targetStop && activeBuses.length === 0) {
-        points.push([targetStop.stop_lat, targetStop.stop_lon])
-      }
-
-      const selectedBus =
-        selectedBusNo === null
-          ? null
-          : (activeBuses.find((bus) => bus.bus_no === selectedBusNo) ?? null)
-
-      if (selectedBus) {
-        if (lastSelectedBusNoRef.current !== selectedBus.bus_no) {
-          map.flyTo([selectedBus.latitude, selectedBus.longitude], 15, {
-            animate: true,
-            duration: 0.4,
-          })
-          lastSelectedBusNoRef.current = selectedBus.bus_no
-        }
-      } else {
-        lastSelectedBusNoRef.current = null
-
-        if (!hasAutoFitRef.current && points.length > 0) {
-          map.fitBounds(points, {
-            padding: [24, 24],
-            animate: false,
-          })
-          hasAutoFitRef.current = true
-        }
-      }
-
-      requestAnimationFrame(() => {
-        map.invalidateSize()
-      })
-    }
-
-    void syncMap()
-
-    return () => {
-      isDisposed = true
-    }
-  }, [
-    activeBuses,
-    onSelectBus,
-    routeShape,
-    routeStops,
-    selectedBusNo,
-    targetStopId,
-  ])
-
-  return (
-    <div className="space-y-2">
-      <div
-        ref={mapContainerRef}
-        className="t789-map rounded-xl border"
-        aria-label="Live T789 route map"
-      />
-      <p className="text-xs text-muted-foreground">
-        The route line, KL Gateway target stop, and active buses are shown on
-        the map.
-      </p>
-    </div>
-  )
-}
-
 function T789Page() {
   const targetStopId = '1000838'
   const apiBaseUrl = useMemo(
@@ -375,7 +65,8 @@ function T789Page() {
   const [activeBuses, setActiveBuses] = useState<T789Bus[]>([])
   const [etas, setEtas] = useState<BusEta[]>([])
   const [routeStops, setRouteStops] = useState<RouteStopsResponse | null>(null)
-  const [routeShape, setRouteShape] = useState<RouteShapeResponse | null>(null)
+  const [routeShape, setRouteShape] = useState<RouteShape | null>(null)
+  const [isLoadingRouteShape, setIsLoadingRouteShape] = useState(false)
   const [stopNameById, setStopNameById] = useState<Record<string, string>>({})
   const [selectedBusNo, setSelectedBusNo] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -386,28 +77,25 @@ function T789Page() {
   const selectedActiveBus =
     selectedBusNo === null
       ? null
-      : (activeBuses.find((bus) => bus.bus_no === selectedBusNo) ?? null)
+      : activeBuses.find((bus) => bus.bus_no === selectedBusNo) ?? null
   const selectedEta =
     selectedBusNo === null
       ? null
-      : (etas.find((eta) => eta.bus_no === selectedBusNo) ?? null)
+      : etas.find((eta) => eta.bus_no === selectedBusNo) ?? null
   const targetStopName = stopNameById[targetStopId] || 'KL Gateway'
   const selectedCurrentStopId =
-    selectedActiveBus?.resolved_stop_id ??
-    selectedActiveBus?.busstop_id ??
-    selectedEta?.current_stop_id ??
-    null
+    selectedActiveBus?.busstop_id ?? selectedEta?.current_stop_id ?? null
   const selectedCurrentSequence =
-    selectedActiveBus?.resolved_stop_sequence ??
     routeStops?.stops.find((stop) => stop.stop_id === selectedCurrentStopId)
       ?.sequence ??
     selectedEta?.current_sequence ??
     null
+  const routePolylinePoints = buildRoutePolylinePoints(
+    routeShape,
+    routeStops?.stops,
+  )
   const interactiveCardClassName =
     'block w-full cursor-pointer rounded border p-2 text-left transition-colors outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
-  const handleSelectBus = useCallback((busNo: string) => {
-    setSelectedBusNo(busNo)
-  }, [])
 
   const normalizeT789Buses = (payload: unknown): T789Bus[] => {
     if (Array.isArray(payload)) {
@@ -427,13 +115,11 @@ function T789Page() {
     setIsLoading(true)
 
     try {
-      const [busesResponse, etaResponse, stopsResponse, shapeResponse] =
-        await Promise.all([
-          fetch(`${apiBaseUrl}/get-route-t789`),
-          fetch(`${apiBaseUrl}/get-t789-eta`),
-          fetch(`${apiBaseUrl}/route/T7890/stops`),
-          fetch(`${apiBaseUrl}/route/T7890/shape`),
-        ])
+      const [busesResponse, etaResponse, stopsResponse] = await Promise.all([
+        fetch(`${apiBaseUrl}/get-route-t789`),
+        fetch(`${apiBaseUrl}/get-t789-eta`),
+        fetch(`${apiBaseUrl}/route/T7890/stops`),
+      ])
 
       if (!busesResponse.ok) {
         const fallbackMessage = 'Unable to fetch active T789 buses'
@@ -447,7 +133,10 @@ function T789Page() {
       const normalizedBuses = normalizeT789Buses(payload)
       setActiveBuses(normalizedBuses)
       setSelectedBusNo((current) => {
-        if (current && normalizedBuses.some((bus) => bus.bus_no === current)) {
+        if (
+          current &&
+          normalizedBuses.some((bus) => bus.bus_no === current)
+        ) {
           return current
         }
 
@@ -479,13 +168,6 @@ function T789Page() {
         setStopNameById(nameMap)
       }
 
-      if (shapeResponse.ok) {
-        const shapeData = (await shapeResponse.json()) as RouteShapeResponse
-        setRouteShape(shapeData)
-      } else {
-        setRouteShape(null)
-      }
-
       setLastUpdated(new Date())
     } catch (error) {
       setErrorMessage(
@@ -498,15 +180,33 @@ function T789Page() {
     }
   }, [apiBaseUrl])
 
+  const fetchT789Shape = useCallback(async () => {
+    setIsLoadingRouteShape(true)
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/route/T7890/shape?stop_id=${encodeURIComponent(targetStopId)}`,
+      )
+      if (!response.ok) {
+        return
+      }
+
+      const shapeData = (await response.json()) as RouteShape
+      setRouteShape(shapeData)
+    } finally {
+      setIsLoadingRouteShape(false)
+    }
+  }, [apiBaseUrl, targetStopId])
+
   useEffect(() => {
     fetchT789Buses()
+    void fetchT789Shape()
 
     const id = setInterval(() => {
       fetchT789Buses()
     }, 15000)
 
     return () => clearInterval(id)
-  }, [fetchT789Buses])
+  }, [fetchT789Buses, fetchT789Shape])
 
   return (
     <main className="mx-auto max-w-4xl p-4 md:p-6">
@@ -535,18 +235,6 @@ function T789Page() {
                 ? `Last updated: ${lastUpdated.toLocaleTimeString()}`
                 : 'No updates yet'}
             </p>
-          </div>
-
-          <div className="rounded-md border p-3">
-            <p className="mb-2 text-sm font-medium">Live route map</p>
-            <T789RouteMap
-              activeBuses={activeBuses}
-              routeShape={routeShape}
-              routeStops={routeStops}
-              selectedBusNo={selectedBusNo}
-              targetStopId={targetStopId}
-              onSelectBus={handleSelectBus}
-            />
           </div>
 
           {errorMessage ? (
@@ -583,13 +271,13 @@ function T789Page() {
               </p>
             ) : null}
 
-            {activeBuses.length > 0 ? (
+          {activeBuses.length > 0 ? (
               <div className="space-y-2">
                 {activeBuses.map((bus) => (
                   <button
                     key={`${bus.route}-${bus.bus_no}`}
                     type="button"
-                    onClick={() => handleSelectBus(bus.bus_no)}
+                    onClick={() => setSelectedBusNo(bus.bus_no)}
                     className={`${interactiveCardClassName} ${
                       selectedBusNo === bus.bus_no
                         ? 'border-foreground bg-secondary'
@@ -605,17 +293,10 @@ function T789Page() {
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Current stop:{' '}
-                      {bus.resolved_stop_name ??
-                        (bus.busstop_id
-                          ? stopNameById[bus.busstop_id] || bus.busstop_id
-                          : bus.resolved_stop_id) ??
-                        'Unknown'}
+                      {bus.busstop_id
+                        ? stopNameById[bus.busstop_id] || bus.busstop_id
+                        : 'Unknown'}
                     </p>
-                    {bus.stop_resolution_source === 'derived' ? (
-                      <p className="text-sm text-muted-foreground">
-                        Estimated from GPS
-                      </p>
-                    ) : null}
                   </button>
                 ))}
               </div>
@@ -636,7 +317,7 @@ function T789Page() {
                   <button
                     key={`${eta.route_id || 'T7890'}-${eta.bus_no}-${eta.current_stop_id}`}
                     type="button"
-                    onClick={() => handleSelectBus(eta.bus_no)}
+                    onClick={() => setSelectedBusNo(eta.bus_no)}
                     className={`${interactiveCardClassName} ${
                       selectedBusNo === eta.bus_no
                         ? 'border-foreground bg-secondary'
@@ -651,19 +332,40 @@ function T789Page() {
                       stops away · {eta.distance_km.toFixed(2)} km
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Current stop: {eta.current_stop_name}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Stop ID: {eta.current_stop_id}
-                      {eta.stop_resolution_source === 'derived'
-                        ? ' · Estimated from GPS'
-                        : ''}
+                      Current stop:{' '}
+                      {stopNameById[eta.current_stop_id] || eta.current_stop_id}
                     </p>
                   </button>
                 ))}
               </div>
             ) : null}
           </div>
+
+          <div className="rounded-md border p-3">
+            <p className="mb-2 text-sm font-medium">Live route map</p>
+            {isLoadingRouteShape ? (
+              <p className="text-sm text-muted-foreground">Loading route...</p>
+            ) : routeStops && routeShape ? (
+              <BusRouteMap
+                stops={routeStops.stops}
+                polylinePoints={routePolylinePoints}
+                buses={activeBuses.map((bus) => ({
+                  id: `${bus.route}-${bus.bus_no}`,
+                  label: `Bus ${bus.bus_no}`,
+                  lat: bus.latitude,
+                  lon: bus.longitude,
+                  isSelected: selectedBusNo === bus.bus_no,
+                }))}
+                currentStopId={selectedCurrentStopId}
+                targetStopId={targetStopId}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Route map is unavailable right now.
+              </p>
+            )}
+          </div>
+
         </CardContent>
       </Card>
 
@@ -693,12 +395,6 @@ function T789Page() {
                   {selectedEta.stops_away} stops away ·{' '}
                   {selectedEta.distance_km.toFixed(2)} km remaining
                 </p>
-                <p className="text-muted-foreground">
-                  Current stop: {selectedEta.current_stop_name}
-                  {selectedEta.stop_resolution_source === 'derived'
-                    ? ' · Estimated from GPS'
-                    : ''}
-                </p>
               </div>
             ) : (
               <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -706,16 +402,33 @@ function T789Page() {
               </div>
             )}
 
-            {routeStops ? (
-              <BusRouteLine
-                routeShortName={routeStops.route_short_name}
-                routeLongName={routeStops.route_long_name}
-                stops={routeStops.stops}
-                currentStopId={selectedCurrentStopId}
-                currentSequence={selectedCurrentSequence}
-                targetStopId={targetStopId}
-                targetLabel="KL Gateway target stop"
-              />
+            {isLoadingRouteShape ? (
+              <p className="text-sm text-muted-foreground">Loading route...</p>
+            ) : routeStops && routeShape ? (
+              <>
+                <BusRouteMap
+                  stops={routeStops.stops}
+                  polylinePoints={routePolylinePoints}
+                  buses={activeBuses.map((bus) => ({
+                    id: `${bus.route}-${bus.bus_no}`,
+                    label: `Bus ${bus.bus_no}`,
+                    lat: bus.latitude,
+                    lon: bus.longitude,
+                    isSelected: selectedBusNo === bus.bus_no,
+                  }))}
+                  currentStopId={selectedCurrentStopId}
+                  targetStopId={targetStopId}
+                />
+                <BusRouteLine
+                  routeShortName={routeStops.route_short_name}
+                  routeLongName={routeStops.route_long_name}
+                  stops={routeStops.stops}
+                  currentStopId={selectedCurrentStopId}
+                  currentSequence={selectedCurrentSequence}
+                  targetStopId={targetStopId}
+                  targetLabel="KL Gateway target stop"
+                />
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Route line is unavailable right now.

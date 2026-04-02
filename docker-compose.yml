@@ -3,7 +3,7 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    restart: unless-stopped
+    restart: always
 
   be:
     build:
@@ -13,11 +13,12 @@ services:
       REDIS_URL: redis://redis:6379/
       BUS_TTL_SECONDS: "120"
       STALE_AFTER_SECONDS: "20"
+      GTFS_DATA_PATH: /app/rapid_kl_data
     depends_on:
       - redis
     ports:
       - "3030:3030"
-    restart: unless-stopped
+    restart: always
 
   fe:
     build:
@@ -29,4 +30,4 @@ services:
       - be
     ports:
       - "3031:3000"
-    restart: unless-stopped
+    restart: always

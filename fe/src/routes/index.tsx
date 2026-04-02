@@ -1,7 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, LoaderCircle, LocateFixed, MapPin } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
+import { getGeolocationPosition } from '@/lib/geolocation'
+import {
+  buildRoutePolylinePoints,
+  type RouteShape,
+} from '@/lib/route-geometry'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -86,6 +92,15 @@ function App() {
   const [routeStopsByRoute, setRouteStopsByRoute] = useState<
     Record<string, RouteStopsResponse>
   >({})
+  const [routeShapesByKey, setRouteShapesByKey] = useState<
+    Record<string, RouteShape>
+  >({})
+  const [loadingRouteShapesByKey, setLoadingRouteShapesByKey] = useState<
+    Record<string, boolean>
+  >({})
+  const [selectedMapRouteId, setSelectedMapRouteId] = useState<string | null>(
+    null,
+  )
   const [selectedBusKey, setSelectedBusKey] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingEta, setIsLoadingEta] = useState(false)
@@ -111,6 +126,41 @@ function App() {
   const selectedRouteStops = selectedBus
     ? routeStopsByRoute[selectedBus.route_id] ?? null
     : null
+  const selectedMapRouteStops = selectedMapRouteId
+    ? routeStopsByRoute[selectedMapRouteId] ?? null
+    : null
+  const getRouteShapeCacheKey = (routeId: string, stopId?: string | null) =>
+    stopId ? `${routeId}::${stopId}` : routeId
+  const getRouteShape = (routeId: string, stopId?: string | null) =>
+    routeShapesByKey[getRouteShapeCacheKey(routeId, stopId)] ??
+    routeShapesByKey[routeId] ??
+    null
+  const selectedMapRouteShape = selectedMapRouteId
+    ? getRouteShape(selectedMapRouteId, nearestStop?.stop_id)
+    : null
+  const selectedRouteShape = selectedBus
+    ? getRouteShape(selectedBus.route_id, nearestStop?.stop_id)
+    : null
+  const selectedMapRouteShapeCacheKey = selectedMapRouteId
+    ? getRouteShapeCacheKey(selectedMapRouteId, nearestStop?.stop_id)
+    : null
+  const selectedRouteShapeCacheKey = selectedBus
+    ? getRouteShapeCacheKey(selectedBus.route_id, nearestStop?.stop_id)
+    : null
+  const isLoadingSelectedMapRouteShape = selectedMapRouteShapeCacheKey
+    ? loadingRouteShapesByKey[selectedMapRouteShapeCacheKey] === true
+    : false
+  const isLoadingSelectedRouteShape = selectedRouteShapeCacheKey
+    ? loadingRouteShapesByKey[selectedRouteShapeCacheKey] === true
+    : false
+  const selectedMapRoutePolylinePoints = buildRoutePolylinePoints(
+    selectedMapRouteShape,
+    selectedMapRouteStops?.stops,
+  )
+  const selectedRoutePolylinePoints = buildRoutePolylinePoints(
+    selectedRouteShape,
+    selectedRouteStops?.stops,
+  )
 
   const fetchNearestStop = async (lat: number, lon: number) => {
     const params = new URLSearchParams({
@@ -135,8 +185,6 @@ function App() {
 
   const fetchEtaToStop = async (stopId: string) => {
     setEtaErrorMessage(null)
-    setNearestStopEta([])
-    setSelectedBusKey(null)
     setSelectedRouteErrorMessage(null)
     setIsLoadingEta(true)
 
@@ -154,7 +202,6 @@ function App() {
 
       const data = (await response.json()) as BusEta[]
       setNearestStopEta(data)
-      setSelectedBusKey(null)
     } catch (error) {
       setEtaErrorMessage(
         error instanceof Error
@@ -185,6 +232,15 @@ function App() {
 
       const data = (await response.json()) as StopRoutesResponse
       setStopRoutes(data.routes)
+      const initialRouteId = data.routes[0]?.route_id ?? null
+      setSelectedMapRouteId(initialRouteId)
+
+      if (initialRouteId) {
+        await Promise.all([
+          fetchRouteStops(initialRouteId),
+          fetchRouteShape(initialRouteId, stopId),
+        ])
+      }
     } catch (error) {
       setRouteErrorMessage(
         error instanceof Error
@@ -232,72 +288,135 @@ function App() {
     }
   }
 
-  const handleSelectBus = async (eta: BusEta) => {
-    setSelectedBusKey(getBusKey(eta))
+  const fetchRouteShape = async (routeId: string, stopId?: string | null) => {
+    const cacheKey = getRouteShapeCacheKey(routeId, stopId)
+    if (routeShapesByKey[cacheKey]) {
+      return routeShapesByKey[cacheKey]
+    }
+
+    setLoadingRouteShapesByKey((current) => ({
+      ...current,
+      [cacheKey]: true,
+    }))
     setSelectedRouteErrorMessage(null)
 
-    if (routeStopsByRoute[eta.route_id]) {
+    try {
+      const params = stopId ? `?stop_id=${encodeURIComponent(stopId)}` : ''
+      const response = await fetch(
+        `${apiBaseUrl}/route/${encodeURIComponent(routeId)}/shape${params}`,
+      )
+      if (!response.ok) {
+        const fallbackMessage = 'Unable to fetch route shape'
+        const body = (await response.json().catch(() => null)) as {
+          error?: string
+        } | null
+        throw new Error(body?.error ?? fallbackMessage)
+      }
+
+      const data = (await response.json()) as RouteShape
+      setRouteShapesByKey((current) => ({
+        ...current,
+        [cacheKey]: data,
+      }))
+      return data
+    } catch (error) {
+      setSelectedRouteErrorMessage(
+        error instanceof Error ? error.message : 'Unable to fetch route shape',
+      )
+      throw error
+    } finally {
+      setLoadingRouteShapesByKey((current) => ({
+        ...current,
+        [cacheKey]: false,
+      }))
+    }
+  }
+
+  const handleSelectBus = async (eta: BusEta) => {
+    setSelectedBusKey(getBusKey(eta))
+    setSelectedMapRouteId(eta.route_id)
+    setSelectedRouteErrorMessage(null)
+
+    if (
+      routeStopsByRoute[eta.route_id] &&
+      getRouteShape(eta.route_id, nearestStop?.stop_id)
+    ) {
       return
     }
 
     try {
-      await fetchRouteStops(eta.route_id)
+      await Promise.all([
+        fetchRouteStops(eta.route_id),
+        fetchRouteShape(eta.route_id, nearestStop?.stop_id),
+      ])
     } catch {
       // Error state is handled above so the selected bus card can still render.
     }
   }
 
-  const handleFindNearestStop = () => {
+  const handleSelectMapRoute = async (routeId: string) => {
+    setSelectedMapRouteId(routeId)
+    setSelectedRouteErrorMessage(null)
+
+    if (routeStopsByRoute[routeId] && getRouteShape(routeId, nearestStop?.stop_id)) {
+      return
+    }
+
+    try {
+      await Promise.all([
+        fetchRouteStops(routeId),
+        fetchRouteShape(routeId, nearestStop?.stop_id),
+      ])
+    } catch {
+      // Map route error is shown via selectedRouteErrorMessage.
+    }
+  }
+
+  const handleFindNearestStop = async ({
+    preserveCurrentData = false,
+  }: {
+    preserveCurrentData?: boolean
+  } = {}) => {
     setErrorMessage(null)
     setEtaErrorMessage(null)
     setRouteErrorMessage(null)
     setSelectedRouteErrorMessage(null)
-    setNearestStop(null)
-    setNearestStopEta([])
-    setStopRoutes([])
-    setRouteStopsByRoute({})
-    setSelectedBusKey(null)
-    setIsLoading(true)
+
+    if (!preserveCurrentData) {
+      setIsLoading(true)
+    }
 
     if (!('geolocation' in navigator)) {
-      setIsLoading(false)
+      if (!preserveCurrentData) {
+        setIsLoading(false)
+      }
       setErrorMessage('Geolocation is not supported by this browser.')
       return
     }
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude
-        const lon = position.coords.longitude
-        setCoords({ lat, lon })
+    try {
+      const position = await getGeolocationPosition(navigator.geolocation)
+      const lat = position.coords.latitude
+      const lon = position.coords.longitude
+      setCoords({ lat, lon })
 
-        try {
-          const nearestStopData = await fetchNearestStop(lat, lon)
-          await Promise.all([
-            fetchEtaToStop(nearestStopData.stop_id),
-            fetchRoutesForStop(nearestStopData.stop_id),
-          ])
-          setLastFetchedAt(new Date())
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : 'Unable to fetch nearest bus stop',
-          )
-        } finally {
-          setIsLoading(false)
-        }
-      },
-      (error) => {
+      const nearestStopData = await fetchNearestStop(lat, lon)
+      await Promise.all([
+        fetchEtaToStop(nearestStopData.stop_id),
+        fetchRoutesForStop(nearestStopData.stop_id),
+      ])
+      setLastFetchedAt(new Date())
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to read your location.',
+      )
+    } finally {
+      if (!preserveCurrentData) {
         setIsLoading(false)
-        setErrorMessage(error.message || 'Unable to read your location.')
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 30000,
-      },
-    )
+      }
+    }
   }
 
   useEffect(() => {
@@ -311,7 +430,7 @@ function App() {
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      handleFindNearestStop()
+      handleFindNearestStop({ preserveCurrentData: true })
     }, 30000)
 
     return () => window.clearInterval(id)
@@ -423,9 +542,15 @@ function App() {
                 {!isLoadingRoutes && stopRoutes.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {stopRoutes.map((route) => (
-                      <div
+                      <button
                         key={route.route_id}
-                        className="rounded-md border bg-background px-3 py-2 text-sm"
+                        type="button"
+                        onClick={() => handleSelectMapRoute(route.route_id)}
+                        className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                          selectedMapRouteId === route.route_id
+                            ? 'border-foreground bg-secondary'
+                            : 'bg-background hover:bg-muted/40'
+                        }`}
                       >
                         <p className="font-medium">
                           {route.route_short_name || route.route_id}
@@ -433,8 +558,61 @@ function App() {
                         <p className="text-muted-foreground">
                           {route.route_long_name}
                         </p>
-                      </div>
+                      </button>
                     ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-4 rounded-md border bg-muted/30 p-3">
+                <p className="text-sm font-medium">Nearest stop map</p>
+                {selectedMapRouteId &&
+                (!selectedMapRouteStops ||
+                  isLoadingSelectedMapRouteShape ||
+                  !selectedMapRouteShape) ? (
+                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Loading route...
+                  </p>
+                ) : null}
+                {selectedRouteErrorMessage &&
+                !isLoadingSelectedMapRouteShape &&
+                (!selectedMapRouteStops || !selectedMapRouteShape) ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {selectedRouteErrorMessage}
+                  </p>
+                ) : null}
+                {!selectedMapRouteId && !isLoadingRoutes ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No route is available to render on the map.
+                  </p>
+                ) : null}
+                {selectedMapRouteStops && selectedMapRouteShape ? (
+                  <div className="mt-2">
+                    <BusRouteMap
+                      stops={selectedMapRouteStops.stops}
+                      polylinePoints={selectedMapRoutePolylinePoints}
+                      buses={nearestStopEta.map((eta) => ({
+                        id: getBusKey(eta),
+                        label: `Bus ${eta.bus_no}`,
+                        lat: eta.current_lat,
+                        lon: eta.current_lon,
+                        isSelected:
+                          selectedBusKey !== null &&
+                          selectedBusKey === getBusKey(eta),
+                      }))}
+                      currentStopId={
+                        selectedBus?.route_id === selectedMapRouteId
+                          ? selectedBus.current_stop_id
+                          : null
+                      }
+                      targetStopId={nearestStop.stop_id}
+                    />
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Map route:{' '}
+                      {selectedMapRouteStops.route_short_name ||
+                        selectedMapRouteStops.route_id}
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -546,10 +724,12 @@ function App() {
               </p>
             </div>
 
-            {isLoadingSelectedRoute ? (
+            {isLoadingSelectedRoute ||
+            isLoadingSelectedRouteShape ||
+            (selectedRouteStops && !selectedRouteShape) ? (
               <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
-                Loading route line...
+                Loading route...
               </p>
             ) : null}
 
@@ -559,19 +739,36 @@ function App() {
               </p>
             ) : null}
 
-            {selectedRouteStops ? (
-              <BusRouteLine
-                routeShortName={
-                  selectedRouteStops.route_short_name ||
-                  selectedRouteStops.route_id
-                }
-                routeLongName={selectedRouteStops.route_long_name}
-                stops={selectedRouteStops.stops}
-                currentStopId={selectedBus.current_stop_id}
-                currentSequence={selectedBus.current_sequence}
-                targetStopId={nearestStop?.stop_id ?? null}
-                targetLabel="Your selected nearest stop"
-              />
+            {selectedRouteStops && selectedRouteShape ? (
+              <>
+                <BusRouteMap
+                  stops={selectedRouteStops.stops}
+                  polylinePoints={selectedRoutePolylinePoints}
+                  buses={[
+                    {
+                      id: getBusKey(selectedBus),
+                      label: `Bus ${selectedBus.bus_no}`,
+                      lat: selectedBus.current_lat,
+                      lon: selectedBus.current_lon,
+                      isSelected: true,
+                    },
+                  ]}
+                  currentStopId={selectedBus.current_stop_id}
+                  targetStopId={nearestStop?.stop_id ?? null}
+                />
+                <BusRouteLine
+                  routeShortName={
+                    selectedRouteStops.route_short_name ||
+                    selectedRouteStops.route_id
+                  }
+                  routeLongName={selectedRouteStops.route_long_name}
+                  stops={selectedRouteStops.stops}
+                  currentStopId={selectedBus.current_stop_id}
+                  currentSequence={selectedBus.current_sequence}
+                  targetStopId={nearestStop?.stop_id ?? null}
+                  targetLabel="Your selected nearest stop"
+                />
+              </>
             ) : null}
           </div>
         ) : null}

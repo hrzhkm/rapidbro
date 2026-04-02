@@ -25,6 +25,7 @@ COPY rapid_kl_data /app/rapid_kl_data
 ENV REDIS_URL=redis://redis:6379/
 ENV BUS_TTL_SECONDS=120
 ENV STALE_AFTER_SECONDS=20
+ENV GTFS_DATA_PATH=/app/rapid_kl_data
 
 EXPOSE 3030
 
