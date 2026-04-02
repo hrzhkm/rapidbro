@@ -3,20 +3,13 @@ import { AlertTriangle, LoaderCircle, LocateFixed, MapPin } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
+import { MapPanelShell } from '@/components/MapPanelShell'
+import { Button } from '@/components/ui/button'
 import { getGeolocationPosition } from '@/lib/geolocation'
 import {
   buildRoutePolylinePoints,
   type RouteShape,
 } from '@/lib/route-geometry'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Dialog } from '@/components/ui/dialog'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -76,6 +69,10 @@ type UserCoords = {
   lat: number
   lon: number
 }
+
+const panelSectionClass =
+  'rounded-2xl border border-white/18 bg-slate-950/38 p-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+const panelSubtleTextClass = 'text-xs text-slate-300'
 
 function App() {
   const apiBaseUrl = useMemo(
@@ -157,10 +154,6 @@ function App() {
     selectedMapRouteShape,
     selectedMapRouteStops?.stops,
   )
-  const selectedRoutePolylinePoints = buildRoutePolylinePoints(
-    selectedRouteShape,
-    selectedRouteStops?.stops,
-  )
 
   const fetchNearestStop = async (lat: number, lon: number) => {
     const params = new URLSearchParams({
@@ -210,45 +203,6 @@ function App() {
       )
     } finally {
       setIsLoadingEta(false)
-    }
-  }
-
-  const fetchRoutesForStop = async (stopId: string) => {
-    setRouteErrorMessage(null)
-    setStopRoutes([])
-    setIsLoadingRoutes(true)
-
-    try {
-      const response = await fetch(
-        `${apiBaseUrl}/stops/${encodeURIComponent(stopId)}/routes`,
-      )
-      if (!response.ok) {
-        const fallbackMessage = 'Unable to fetch routes for nearest stop'
-        const body = (await response.json().catch(() => null)) as {
-          error?: string
-        } | null
-        throw new Error(body?.error ?? fallbackMessage)
-      }
-
-      const data = (await response.json()) as StopRoutesResponse
-      setStopRoutes(data.routes)
-      const initialRouteId = data.routes[0]?.route_id ?? null
-      setSelectedMapRouteId(initialRouteId)
-
-      if (initialRouteId) {
-        await Promise.all([
-          fetchRouteStops(initialRouteId),
-          fetchRouteShape(initialRouteId, stopId),
-        ])
-      }
-    } catch (error) {
-      setRouteErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to fetch routes for nearest stop',
-      )
-    } finally {
-      setIsLoadingRoutes(false)
     }
   }
 
@@ -332,6 +286,45 @@ function App() {
     }
   }
 
+  const fetchRoutesForStop = async (stopId: string) => {
+    setRouteErrorMessage(null)
+    setStopRoutes([])
+    setIsLoadingRoutes(true)
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/stops/${encodeURIComponent(stopId)}/routes`,
+      )
+      if (!response.ok) {
+        const fallbackMessage = 'Unable to fetch routes for nearest stop'
+        const body = (await response.json().catch(() => null)) as {
+          error?: string
+        } | null
+        throw new Error(body?.error ?? fallbackMessage)
+      }
+
+      const data = (await response.json()) as StopRoutesResponse
+      setStopRoutes(data.routes)
+      const initialRouteId = data.routes[0]?.route_id ?? null
+      setSelectedMapRouteId(initialRouteId)
+
+      if (initialRouteId) {
+        await Promise.all([
+          fetchRouteStops(initialRouteId),
+          fetchRouteShape(initialRouteId, stopId),
+        ])
+      }
+    } catch (error) {
+      setRouteErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to fetch routes for nearest stop',
+      )
+    } finally {
+      setIsLoadingRoutes(false)
+    }
+  }
+
   const handleSelectBus = async (eta: BusEta) => {
     setSelectedBusKey(getBusKey(eta))
     setSelectedMapRouteId(eta.route_id)
@@ -350,7 +343,7 @@ function App() {
         fetchRouteShape(eta.route_id, nearestStop?.stop_id),
       ])
     } catch {
-      // Error state is handled above so the selected bus card can still render.
+      // Error state is handled above so selected details can still render.
     }
   }
 
@@ -425,354 +418,249 @@ function App() {
     }
 
     hasAutoRequestedNearestStopRef.current = true
-    handleFindNearestStop()
+    void handleFindNearestStop()
   }, [])
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      handleFindNearestStop({ preserveCurrentData: true })
+      void handleFindNearestStop({ preserveCurrentData: true })
     }, 30000)
 
     return () => window.clearInterval(id)
   }, [])
 
-  return (
-    <main className="mx-auto max-w-4xl p-4 md:p-6">
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Nearest Bus Stop Finder</CardTitle>
-          <CardDescription>
-            Get your current coordinates from the browser, then fetch the
-            closest GTFS stop from the backend.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              onClick={handleFindNearestStop}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <LoaderCircle className="animate-spin" />
-                  Finding...
-                </>
-              ) : (
-                <>
-                  <LocateFixed />
-                  {coords ? 'Refresh nearest stop' : 'Find nearest stop'}
-                </>
-              )}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              {lastFetchedAt
-                ? `Last fetched: ${lastFetchedAt.toLocaleTimeString()}`
-                : 'No fetch yet'}
-            </p>
-          </div>
-
-          {errorMessage ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
-              <p className="inline-flex items-center gap-2 text-sm font-medium text-destructive">
-                <AlertTriangle className="h-4 w-4" />
-                Error
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {errorMessage}
-              </p>
-            </div>
-          ) : null}
-
-          {coords ? (
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="text-sm font-medium">Your location</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Latitude: {coords.lat.toFixed(6)} | Longitude:{' '}
-                {coords.lon.toFixed(6)}
-              </p>
-            </div>
-          ) : null}
-
-          {nearestStop ? (
-            <div className="rounded-md border p-4">
-              <p className="inline-flex items-center gap-2 text-sm font-medium">
-                <MapPin className="h-4 w-4" />
-                Nearest stop
-              </p>
-              <p className="mt-2 text-lg font-semibold">
-                {nearestStop.stop_name}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Stop ID: {nearestStop.stop_id}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {nearestStop.stop_desc || 'No stop description'}
-              </p>
-              <p className="mt-2 text-sm">
-                Distance: {nearestStop.distance_meters.toFixed(1)} m (
-                {nearestStop.distance_km.toFixed(3)} km)
-              </p>
-
-              <div className="mt-4 rounded-md border bg-muted/30 p-3">
-                <p className="text-sm font-medium">
-                  Routes serving this stop
-                </p>
-                {isLoadingRoutes ? (
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Loading routes...
-                  </p>
-                ) : null}
-
-                {routeErrorMessage ? (
-                  <p className="mt-2 text-sm text-destructive">
-                    {routeErrorMessage}
-                  </p>
-                ) : null}
-
-                {!isLoadingRoutes &&
-                !routeErrorMessage &&
-                stopRoutes.length === 0 ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    No registered routes found for this stop.
-                  </p>
-                ) : null}
-
-                {!isLoadingRoutes && stopRoutes.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {stopRoutes.map((route) => (
-                      <button
-                        key={route.route_id}
-                        type="button"
-                        onClick={() => handleSelectMapRoute(route.route_id)}
-                        className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                          selectedMapRouteId === route.route_id
-                            ? 'border-foreground bg-secondary'
-                            : 'bg-background hover:bg-muted/40'
-                        }`}
-                      >
-                        <p className="font-medium">
-                          {route.route_short_name || route.route_id}
-                        </p>
-                        <p className="text-muted-foreground">
-                          {route.route_long_name}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-4 rounded-md border bg-muted/30 p-3">
-                <p className="text-sm font-medium">Nearest stop map</p>
-                {selectedMapRouteId &&
-                (!selectedMapRouteStops ||
-                  isLoadingSelectedMapRouteShape ||
-                  !selectedMapRouteShape) ? (
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Loading route...
-                  </p>
-                ) : null}
-                {selectedRouteErrorMessage &&
-                !isLoadingSelectedMapRouteShape &&
-                (!selectedMapRouteStops || !selectedMapRouteShape) ? (
-                  <p className="mt-2 text-sm text-destructive">
-                    {selectedRouteErrorMessage}
-                  </p>
-                ) : null}
-                {!selectedMapRouteId && !isLoadingRoutes ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    No route is available to render on the map.
-                  </p>
-                ) : null}
-                {selectedMapRouteStops && selectedMapRouteShape ? (
-                  <div className="mt-2">
-                    <BusRouteMap
-                      stops={selectedMapRouteStops.stops}
-                      polylinePoints={selectedMapRoutePolylinePoints}
-                      buses={nearestStopEta.map((eta) => ({
-                        id: getBusKey(eta),
-                        label: `Bus ${eta.bus_no}`,
-                        lat: eta.current_lat,
-                        lon: eta.current_lon,
-                        isSelected:
-                          selectedBusKey !== null &&
-                          selectedBusKey === getBusKey(eta),
-                      }))}
-                      currentStopId={
-                        selectedBus?.route_id === selectedMapRouteId
-                          ? selectedBus.current_stop_id
-                          : null
-                      }
-                      targetStopId={nearestStop.stop_id}
-                    />
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Map route:{' '}
-                      {selectedMapRouteStops.route_short_name ||
-                        selectedMapRouteStops.route_id}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-4 rounded-md border bg-muted/30 p-3">
-                <p className="text-sm font-medium">
-                  Active buses heading to this stop ({nearestStopEta.length})
-                </p>
-                {isLoadingEta ? (
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Loading ETA...
-                  </p>
-                ) : null}
-
-                {etaErrorMessage ? (
-                  <p className="mt-2 text-sm text-destructive">
-                    {etaErrorMessage}
-                  </p>
-                ) : null}
-
-                {!isLoadingEta &&
-                !etaErrorMessage &&
-                nearestStopEta.length === 0 ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    No active buses heading to this stop right now.
-                  </p>
-                ) : null}
-
-                {!isLoadingEta && nearestStopEta.length > 0 ? (
-                  <div className="mt-2 space-y-2">
-                    {nearestStopEta.map((eta) => (
-                      <button
-                        key={getBusKey(eta)}
-                        type="button"
-                        onClick={() => handleSelectBus(eta)}
-                        className={`block w-full rounded border bg-background p-2 text-left text-sm transition-colors ${
-                          selectedBusKey === getBusKey(eta)
-                            ? 'border-foreground bg-secondary'
-                            : 'hover:bg-muted/40'
-                        }`}
-                      >
-                        <p className="font-medium">Bus {eta.bus_no}</p>
-                        <p className="text-muted-foreground">
-                          Route {eta.route_id} · ETA{' '}
-                          {eta.eta_minutes.toFixed(1)} min · {eta.stops_away}{' '}
-                          stops away · {eta.distance_km.toFixed(2)} km
-                        </p>
-                        <p className="text-muted-foreground">
-                          Current stop: {eta.current_stop_name}
-                        </p>
-                        <p className="text-muted-foreground">
-                          Stop ID: {eta.current_stop_id}
-                          {eta.stop_resolution_source === 'derived'
-                            ? ' · Estimated from GPS'
-                            : ''}
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-            </div>
-          ) : (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Automatically checking your location. You can also tap{' '}
-              <span className="font-medium text-foreground">
-                {coords ? 'Refresh nearest stop' : 'Find nearest stop'}
-              </span>{' '}
-              any time.
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog
-        open={selectedBus !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedBusKey(null)
-          }
-        }}
-        title={
-          selectedBus
-            ? `Bus ${selectedBus.bus_no} · Route ${selectedBus.route_id}`
-            : 'Bus route detail'
+  const mapContent =
+    selectedMapRouteStops && selectedMapRouteShape ? (
+      <BusRouteMap
+        className="h-full"
+        fullScreen
+        showLegend={false}
+        stops={selectedMapRouteStops.stops}
+        polylinePoints={selectedMapRoutePolylinePoints}
+        buses={nearestStopEta.map((eta) => ({
+          id: getBusKey(eta),
+          label: `Bus ${eta.bus_no}`,
+          lat: eta.current_lat,
+          lon: eta.current_lon,
+          isSelected:
+            selectedBusKey !== null && selectedBusKey === getBusKey(eta),
+        }))}
+        currentStopId={
+          selectedBus?.route_id === selectedMapRouteId
+            ? selectedBus.current_stop_id
+            : null
         }
-        description="The current bus position and your selected stop are highlighted on the route line."
-      >
-        {selectedBus ? (
-          <div className="space-y-4">
-            <div className="rounded-md border bg-muted/30 p-3 text-sm">
-              <p className="font-medium">
-                ETA {selectedBus.eta_minutes.toFixed(1)} min
-              </p>
-              <p className="text-muted-foreground">
-                {selectedBus.stops_away} stops away ·{' '}
-                {selectedBus.distance_km.toFixed(2)} km remaining
-              </p>
-              <p className="text-muted-foreground">
-                Current stop: {selectedBus.current_stop_name}
-              </p>
-              <p className="text-muted-foreground">
-                Stop ID: {selectedBus.current_stop_id}
-                {selectedBus.stop_resolution_source === 'derived'
-                  ? ' · Estimated from GPS'
-                  : ''}
-              </p>
-            </div>
+        targetStopId={nearestStop?.stop_id ?? null}
+      />
+    ) : (
+      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_12%,rgba(252,211,77,0.38),transparent_40%),radial-gradient(circle_at_80%_85%,rgba(34,211,238,0.2),transparent_34%),linear-gradient(120deg,#0f172a_0%,#1e293b_45%,#334155_100%)] px-6 text-center text-slate-100">
+        <div>
+          <p className="font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-100">
+            Live Route Map
+          </p>
+          <p className="mt-2 text-sm text-slate-200">
+            {isLoadingRoutes || isLoadingSelectedMapRouteShape
+              ? 'Loading the best route view for your nearest stop...'
+              : 'Pick a route from the panel to render its live map.'}
+          </p>
+          {selectedRouteErrorMessage ? (
+            <p className="mt-2 text-xs text-rose-200">{selectedRouteErrorMessage}</p>
+          ) : null}
+        </div>
+      </div>
+    )
 
-            {isLoadingSelectedRoute ||
-            isLoadingSelectedRouteShape ||
-            (selectedRouteStops && !selectedRouteShape) ? (
-              <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-                Loading route...
-              </p>
-            ) : null}
-
-            {selectedRouteErrorMessage ? (
-              <p className="text-sm text-destructive">
-                {selectedRouteErrorMessage}
-              </p>
-            ) : null}
-
-            {selectedRouteStops && selectedRouteShape ? (
+  return (
+    <MapPanelShell
+      map={mapContent}
+      panelTitle="Nearest Bus Stop"
+      panelDescription="Track buses around your current stop with live route context."
+      panelStatus={
+        <p className="text-slate-300">
+          {lastFetchedAt
+            ? `Updated ${lastFetchedAt.toLocaleTimeString()}`
+            : 'Waiting for location update'}
+        </p>
+      }
+      panelActions={
+        <div className="space-y-2">
+          <Button
+            type="button"
+            onClick={() => handleFindNearestStop()}
+            disabled={isLoading}
+            className="w-full bg-amber-500 text-slate-900 hover:bg-amber-400"
+          >
+            {isLoading ? (
               <>
-                <BusRouteMap
-                  stops={selectedRouteStops.stops}
-                  polylinePoints={selectedRoutePolylinePoints}
-                  buses={[
-                    {
-                      id: getBusKey(selectedBus),
-                      label: `Bus ${selectedBus.bus_no}`,
-                      lat: selectedBus.current_lat,
-                      lon: selectedBus.current_lon,
-                      isSelected: true,
-                    },
-                  ]}
-                  currentStopId={selectedBus.current_stop_id}
-                  targetStopId={nearestStop?.stop_id ?? null}
-                />
-                <BusRouteLine
-                  routeShortName={
-                    selectedRouteStops.route_short_name ||
-                    selectedRouteStops.route_id
-                  }
-                  routeLongName={selectedRouteStops.route_long_name}
-                  stops={selectedRouteStops.stops}
-                  currentStopId={selectedBus.current_stop_id}
-                  currentSequence={selectedBus.current_sequence}
-                  targetStopId={nearestStop?.stop_id ?? null}
-                  targetLabel="Your selected nearest stop"
-                />
+                <LoaderCircle className="animate-spin" />
+                Finding nearest stop...
               </>
-            ) : null}
+            ) : (
+              <>
+                <LocateFixed />
+                {coords ? 'Refresh nearest stop' : 'Find nearest stop'}
+              </>
+            )}
+          </Button>
+          {coords ? (
+            <p className={panelSubtleTextClass}>
+              Lat {coords.lat.toFixed(5)} · Lon {coords.lon.toFixed(5)}
+            </p>
+          ) : null}
+        </div>
+      }
+    >
+      {errorMessage ? (
+        <section className={panelSectionClass}>
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-200">
+            <AlertTriangle className="h-4 w-4" />
+            Location Error
+          </p>
+          <p className="mt-1 text-xs text-slate-300">{errorMessage}</p>
+        </section>
+      ) : null}
+
+      <section className={panelSectionClass}>
+        <p className="inline-flex items-center gap-2 text-sm font-medium text-amber-100">
+          <MapPin className="h-4 w-4" />
+          Nearest Stop
+        </p>
+
+        {nearestStop ? (
+          <>
+            <p className="mt-2 text-base font-semibold">{nearestStop.stop_name}</p>
+            <p className={panelSubtleTextClass}>Stop ID: {nearestStop.stop_id}</p>
+            <p className="mt-1 text-xs text-slate-200">
+              {nearestStop.stop_desc || 'No stop description'}
+            </p>
+            <p className="mt-2 text-xs text-slate-200">
+              {nearestStop.distance_meters.toFixed(1)} m · {nearestStop.distance_km.toFixed(3)} km
+            </p>
+          </>
+        ) : (
+          <p className="mt-2 text-xs text-slate-300">Waiting for nearest stop data.</p>
+        )}
+      </section>
+
+      <section className={panelSectionClass}>
+        <p className="text-sm font-medium text-amber-100">Routes At This Stop</p>
+        {isLoadingRoutes ? (
+          <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-300">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            Loading routes...
+          </p>
+        ) : null}
+        {routeErrorMessage ? (
+          <p className="mt-2 text-xs text-rose-200">{routeErrorMessage}</p>
+        ) : null}
+        {!isLoadingRoutes && !routeErrorMessage && stopRoutes.length === 0 ? (
+          <p className="mt-2 text-xs text-slate-300">No registered routes for this stop.</p>
+        ) : null}
+        {!isLoadingRoutes && stopRoutes.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {stopRoutes.map((route) => (
+              <button
+                key={route.route_id}
+                type="button"
+                onClick={() => handleSelectMapRoute(route.route_id)}
+                className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                  selectedMapRouteId === route.route_id
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-100'
+                    : 'border-white/15 bg-slate-950/25 text-slate-200 hover:bg-slate-900/65'
+                }`}
+              >
+                <p className="font-medium">{route.route_short_name || route.route_id}</p>
+                <p className="text-[11px] text-slate-300">{route.route_long_name}</p>
+              </button>
+            ))}
           </div>
         ) : null}
-      </Dialog>
-    </main>
+      </section>
+
+      <section className={panelSectionClass}>
+        <p className="text-sm font-medium text-amber-100">
+          Active Buses To This Stop ({nearestStopEta.length})
+        </p>
+        {isLoadingEta ? (
+          <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-300">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            Loading ETA...
+          </p>
+        ) : null}
+        {etaErrorMessage ? <p className="mt-2 text-xs text-rose-200">{etaErrorMessage}</p> : null}
+        {!isLoadingEta && !etaErrorMessage && nearestStopEta.length === 0 ? (
+          <p className="mt-2 text-xs text-slate-300">No active buses right now.</p>
+        ) : null}
+        {!isLoadingEta && nearestStopEta.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            {nearestStopEta.map((eta) => (
+              <button
+                key={getBusKey(eta)}
+                type="button"
+                onClick={() => handleSelectBus(eta)}
+                className={`block w-full rounded-xl border p-2 text-left text-xs transition-colors ${
+                  selectedBusKey === getBusKey(eta)
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-100'
+                    : 'border-white/15 bg-slate-950/25 text-slate-100 hover:bg-slate-900/65'
+                }`}
+              >
+                <p className="font-medium">Bus {eta.bus_no}</p>
+                <p className="text-slate-200">
+                  Route {eta.route_id} · ETA {eta.eta_minutes.toFixed(1)} min
+                </p>
+                <p className="text-slate-300">
+                  {eta.stops_away} stops away · {eta.distance_km.toFixed(2)} km
+                </p>
+                <p className="text-slate-300">Current: {eta.current_stop_name}</p>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      {selectedBus ? (
+        <section className={panelSectionClass}>
+          <p className="text-sm font-medium text-amber-100">
+            Selected Bus {selectedBus.bus_no} · Route {selectedBus.route_id}
+          </p>
+          <p className="mt-1 text-xs text-slate-200">
+            ETA {selectedBus.eta_minutes.toFixed(1)} min · {selectedBus.stops_away} stops away
+          </p>
+          <p className="text-xs text-slate-300">
+            Current stop: {selectedBus.current_stop_name} ({selectedBus.current_stop_id})
+            {selectedBus.stop_resolution_source === 'derived' ? ' · Estimated from GPS' : ''}
+          </p>
+
+          {isLoadingSelectedRoute ||
+          isLoadingSelectedRouteShape ||
+          (selectedRouteStops && !selectedRouteShape) ? (
+            <p className="mt-3 inline-flex items-center gap-2 text-xs text-slate-300">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Loading route detail...
+            </p>
+          ) : null}
+
+          {selectedRouteErrorMessage ? (
+            <p className="mt-3 text-xs text-rose-200">{selectedRouteErrorMessage}</p>
+          ) : null}
+
+          {selectedRouteStops && selectedRouteShape ? (
+            <div className="mt-3">
+              <BusRouteLine
+                routeShortName={
+                  selectedRouteStops.route_short_name || selectedRouteStops.route_id
+                }
+                routeLongName={selectedRouteStops.route_long_name}
+                stops={selectedRouteStops.stops}
+                currentStopId={selectedBus.current_stop_id}
+                currentSequence={selectedBus.current_sequence}
+                targetStopId={nearestStop?.stop_id ?? null}
+                targetLabel="Your selected nearest stop"
+              />
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+    </MapPanelShell>
   )
 }

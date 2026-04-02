@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 type RouteMapStop = {
   stop_id: string
@@ -21,6 +22,8 @@ type BusRouteMapProps = {
   }>
   currentStopId?: string | null
   targetStopId?: string | null
+  fullScreen?: boolean
+  showLegend?: boolean
   className?: string
 }
 
@@ -52,7 +55,7 @@ async function loadLeaflet() {
   return import('leaflet')
 }
 
-function getBusMarkerScale(zoom: number): number {
+export function getBusMarkerScale(zoom: number): number {
   // Keep markers readable at low zoom while avoiding oversized overlap.
   if (zoom <= 13) return 0.72
   if (zoom <= 14) return 0.82
@@ -67,6 +70,8 @@ function BusRouteMap({
   buses = [],
   currentStopId = null,
   targetStopId = null,
+  fullScreen = false,
+  showLegend = true,
   className,
 }: BusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
@@ -264,12 +269,17 @@ function BusRouteMap({
     <div className={className} data-testid="bus-route-map">
       <div
         ref={mapContainerRef}
-        className="bus-route-map rounded-md border"
+        className={cn(
+          'bus-route-map rounded-md border',
+          fullScreen ? 'is-fullscreen rounded-none border-0' : null,
+        )}
         aria-label="Bus route map"
       />
-      <p className="mt-2 text-xs text-muted-foreground">
-        Current bus and target stop are emphasized on the route.
-      </p>
+      {showLegend ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Current bus and target stop are emphasized on the route.
+        </p>
+      ) : null}
     </div>
   )
 }

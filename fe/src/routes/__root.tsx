@@ -47,7 +47,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <Header />
-        {children}
+        <div className="pt-14">{children}</div>
         <Scripts />
       </body>
     </html>
