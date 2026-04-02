@@ -16,6 +16,7 @@ services:
       REDIS_URL: redis://redis:6379/
       BUS_TTL_SECONDS: "120"
       STALE_AFTER_SECONDS: "20"
+      GTFS_DATA_PATH: /app/rapid_kl_data
     ports:
       - "3030:3030"
 
