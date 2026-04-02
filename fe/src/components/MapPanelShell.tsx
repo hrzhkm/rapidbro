@@ -21,7 +21,7 @@ function MapPanelShell({
   panelActions,
   children,
 }: MapPanelShellProps) {
-  const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(true)
+  const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false)
 
   return (
     <main className="relative h-[calc(100dvh-3.5rem)] overflow-hidden bg-amber-50">
