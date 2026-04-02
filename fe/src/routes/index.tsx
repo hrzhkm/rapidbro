@@ -7,9 +7,11 @@ import { MapPanelShell } from '@/components/MapPanelShell'
 import { Button } from '@/components/ui/button'
 import { getGeolocationPosition } from '@/lib/geolocation'
 import {
-  buildRoutePolylinePoints,
-  type RouteShape,
-} from '@/lib/route-geometry'
+  buildRoutePrefetchWarning,
+  buildVisibleRouteLayers,
+  shouldShowRouteStopMarkers,
+} from '@/lib/route-map-layers'
+import { type RouteShape } from '@/lib/route-geometry'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -123,36 +125,34 @@ function App() {
   const selectedRouteStops = selectedBus
     ? routeStopsByRoute[selectedBus.route_id] ?? null
     : null
-  const selectedMapRouteStops = selectedMapRouteId
-    ? routeStopsByRoute[selectedMapRouteId] ?? null
-    : null
   const getRouteShapeCacheKey = (routeId: string, stopId?: string | null) =>
     stopId ? `${routeId}::${stopId}` : routeId
   const getRouteShape = (routeId: string, stopId?: string | null) =>
     routeShapesByKey[getRouteShapeCacheKey(routeId, stopId)] ??
     routeShapesByKey[routeId] ??
     null
-  const selectedMapRouteShape = selectedMapRouteId
-    ? getRouteShape(selectedMapRouteId, nearestStop?.stop_id)
-    : null
   const selectedRouteShape = selectedBus
     ? getRouteShape(selectedBus.route_id, nearestStop?.stop_id)
-    : null
-  const selectedMapRouteShapeCacheKey = selectedMapRouteId
-    ? getRouteShapeCacheKey(selectedMapRouteId, nearestStop?.stop_id)
     : null
   const selectedRouteShapeCacheKey = selectedBus
     ? getRouteShapeCacheKey(selectedBus.route_id, nearestStop?.stop_id)
     : null
-  const isLoadingSelectedMapRouteShape = selectedMapRouteShapeCacheKey
-    ? loadingRouteShapesByKey[selectedMapRouteShapeCacheKey] === true
-    : false
   const isLoadingSelectedRouteShape = selectedRouteShapeCacheKey
     ? loadingRouteShapesByKey[selectedRouteShapeCacheKey] === true
     : false
-  const selectedMapRoutePolylinePoints = buildRoutePolylinePoints(
-    selectedMapRouteShape,
-    selectedMapRouteStops?.stops,
+  const mapRouteIds = useMemo(
+    () => stopRoutes.map((route) => route.route_id),
+    [stopRoutes],
+  )
+  const visibleRouteLayers = useMemo(
+    () =>
+      buildVisibleRouteLayers({
+        routeIds: mapRouteIds,
+        selectedRouteId: selectedMapRouteId,
+        routeStopsByRoute,
+        resolveShape: (routeId) => getRouteShape(routeId, nearestStop?.stop_id),
+      }),
+    [mapRouteIds, selectedMapRouteId, routeStopsByRoute, routeShapesByKey, nearestStop],
   )
   const visibleMapBuses = useMemo(
     () =>
@@ -213,13 +213,28 @@ function App() {
     }
   }
 
-  const fetchRouteStops = async (routeId: string) => {
+  const fetchRouteStops = async (
+    routeId: string,
+    options: {
+      setSelectedErrorState?: boolean
+      setSelectedLoadingState?: boolean
+    } = {},
+  ) => {
+    const {
+      setSelectedErrorState = true,
+      setSelectedLoadingState = true,
+    } = options
+
     if (routeStopsByRoute[routeId]) {
       return routeStopsByRoute[routeId]
     }
 
-    setSelectedRouteErrorMessage(null)
-    setIsLoadingSelectedRoute(true)
+    if (setSelectedErrorState) {
+      setSelectedRouteErrorMessage(null)
+    }
+    if (setSelectedLoadingState) {
+      setIsLoadingSelectedRoute(true)
+    }
 
     try {
       const response = await fetch(
@@ -242,14 +257,25 @@ function App() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to fetch route stops'
-      setSelectedRouteErrorMessage(message)
+      if (setSelectedErrorState) {
+        setSelectedRouteErrorMessage(message)
+      }
       throw error
     } finally {
-      setIsLoadingSelectedRoute(false)
+      if (setSelectedLoadingState) {
+        setIsLoadingSelectedRoute(false)
+      }
     }
   }
 
-  const fetchRouteShape = async (routeId: string, stopId?: string | null) => {
+  const fetchRouteShape = async (
+    routeId: string,
+    stopId?: string | null,
+    options: {
+      setSelectedErrorState?: boolean
+    } = {},
+  ) => {
+    const { setSelectedErrorState = true } = options
     const cacheKey = getRouteShapeCacheKey(routeId, stopId)
     if (routeShapesByKey[cacheKey]) {
       return routeShapesByKey[cacheKey]
@@ -259,7 +285,9 @@ function App() {
       ...current,
       [cacheKey]: true,
     }))
-    setSelectedRouteErrorMessage(null)
+    if (setSelectedErrorState) {
+      setSelectedRouteErrorMessage(null)
+    }
 
     try {
       const params = stopId ? `?stop_id=${encodeURIComponent(stopId)}` : ''
@@ -281,9 +309,11 @@ function App() {
       }))
       return data
     } catch (error) {
-      setSelectedRouteErrorMessage(
-        error instanceof Error ? error.message : 'Unable to fetch route shape',
-      )
+      if (setSelectedErrorState) {
+        setSelectedRouteErrorMessage(
+          error instanceof Error ? error.message : 'Unable to fetch route shape',
+        )
+      }
       throw error
     } finally {
       setLoadingRouteShapesByKey((current) => ({
@@ -312,14 +342,38 @@ function App() {
 
       const data = (await response.json()) as StopRoutesResponse
       setStopRoutes(data.routes)
-      const initialRouteId = data.routes[0]?.route_id ?? null
-      setSelectedMapRouteId(initialRouteId)
+      setSelectedMapRouteId(null)
 
-      if (initialRouteId) {
-        await Promise.all([
-          fetchRouteStops(initialRouteId),
-          fetchRouteShape(initialRouteId, stopId),
-        ])
+      if (data.routes.length > 0) {
+        const prefetchResults = await Promise.allSettled(
+          data.routes.map(async (route) => {
+            await Promise.all([
+              fetchRouteStops(route.route_id, {
+                setSelectedErrorState: false,
+                setSelectedLoadingState: false,
+              }),
+              fetchRouteShape(
+                route.route_id,
+                stopId,
+                {
+                  setSelectedErrorState: false,
+                },
+              ),
+            ])
+            return route.route_id
+          }),
+        )
+
+        const failedRouteIds = prefetchResults.flatMap((result, index) =>
+          result.status === 'rejected'
+            ? [data.routes[index]?.route_id ?? 'Unknown route']
+            : [],
+        )
+        const prefetchWarning = buildRoutePrefetchWarning({
+          failedRouteIds,
+          totalRouteCount: data.routes.length,
+        })
+        setRouteErrorMessage(prefetchWarning)
       }
     } catch (error) {
       setRouteErrorMessage(
@@ -370,6 +424,53 @@ function App() {
     } catch {
       // Map route error is shown via selectedRouteErrorMessage.
     }
+  }
+
+  const handleSelectAllRoutes = async () => {
+    setSelectedMapRouteId(null)
+    setSelectedRouteErrorMessage(null)
+    setRouteErrorMessage(null)
+
+    if (!nearestStop || stopRoutes.length === 0) {
+      return
+    }
+
+    const uncachedRouteIds = stopRoutes
+      .map((route) => route.route_id)
+      .filter(
+        (routeId) =>
+          !routeStopsByRoute[routeId] ||
+          getRouteShape(routeId, nearestStop.stop_id) === null,
+      )
+    if (uncachedRouteIds.length === 0) {
+      return
+    }
+
+    const prefetchResults = await Promise.allSettled(
+      uncachedRouteIds.map(async (routeId) => {
+        await Promise.all([
+          fetchRouteStops(routeId, {
+            setSelectedErrorState: false,
+            setSelectedLoadingState: false,
+          }),
+          fetchRouteShape(routeId, nearestStop.stop_id, {
+            setSelectedErrorState: false,
+          }),
+        ])
+        return routeId
+      }),
+    )
+
+    const failedRouteIds = prefetchResults.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [uncachedRouteIds[index] ?? 'Unknown route']
+        : [],
+    )
+    const prefetchWarning = buildRoutePrefetchWarning({
+      failedRouteIds,
+      totalRouteCount: uncachedRouteIds.length,
+    })
+    setRouteErrorMessage(prefetchWarning)
   }
 
   const handleFindNearestStop = async ({
@@ -437,13 +538,14 @@ function App() {
   }, [])
 
   const mapContent =
-    selectedMapRouteStops && selectedMapRouteShape ? (
+    visibleRouteLayers.length > 0 ? (
       <BusRouteMap
         className="h-full"
         fullScreen
         showLegend={false}
-        stops={selectedMapRouteStops.stops}
-        polylinePoints={selectedMapRoutePolylinePoints}
+        routeLayers={visibleRouteLayers}
+        stops={[]}
+        showStopMarkers={shouldShowRouteStopMarkers(selectedMapRouteId)}
         buses={visibleMapBuses.map((eta) => ({
           id: getBusKey(eta),
           label: `Bus ${eta.bus_no}`,
@@ -466,7 +568,7 @@ function App() {
             Live Route Map
           </p>
           <p className="mt-2 text-sm text-slate-700">
-            {isLoadingRoutes || isLoadingSelectedMapRouteShape
+            {isLoadingRoutes
               ? 'Loading the best route view for your nearest stop...'
               : 'Pick a route from the panel to render its live map.'}
           </p>
@@ -565,11 +667,25 @@ function App() {
         ) : null}
         {!isLoadingRoutes && stopRoutes.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void handleSelectAllRoutes()}
+              className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
+                selectedMapRouteId === null
+                  ? 'border-amber-300 bg-amber-200/20 text-amber-900'
+                  : 'border-amber-200/80 bg-white/70 text-slate-700 hover:bg-amber-100/80'
+              }`}
+            >
+              <p className="font-medium">All Routes</p>
+              <p className="text-[11px] text-slate-600">
+                Overlay every route on the map
+              </p>
+            </button>
             {stopRoutes.map((route) => (
               <button
                 key={route.route_id}
                 type="button"
-                onClick={() => handleSelectMapRoute(route.route_id)}
+                onClick={() => void handleSelectMapRoute(route.route_id)}
                 className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
                   selectedMapRouteId === route.route_id
                     ? 'border-amber-300 bg-amber-200/20 text-amber-900'
