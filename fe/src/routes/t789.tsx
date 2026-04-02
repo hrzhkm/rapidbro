@@ -1,21 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, LoaderCircle, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
+import { MapPanelShell } from '@/components/MapPanelShell'
+import { Button } from '@/components/ui/button'
+import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import {
   buildRoutePolylinePoints,
   type RouteShape,
 } from '@/lib/route-geometry'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Dialog } from '@/components/ui/dialog'
 
 export const Route = createFileRoute('/t789')({
   component: T789Page,
@@ -55,6 +49,10 @@ type RouteStopsResponse = {
   }>
 }
 
+const panelSectionClass =
+  'rounded-2xl border border-amber-200/80 bg-white/78 p-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]'
+const BUS_GRACE_WINDOW_MS = 5 * 60 * 1000
+
 function T789Page() {
   const targetStopId = '1000838'
   const apiBaseUrl = useMemo(
@@ -64,6 +62,10 @@ function T789Page() {
 
   const [activeBuses, setActiveBuses] = useState<T789Bus[]>([])
   const [etas, setEtas] = useState<BusEta[]>([])
+  const activeBusesRef = useRef<T789Bus[]>([])
+  const etasRef = useRef<BusEta[]>([])
+  const lastNonEmptyActiveAtMsRef = useRef<number | null>(null)
+  const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
   const [routeStops, setRouteStops] = useState<RouteStopsResponse | null>(null)
   const [routeShape, setRouteShape] = useState<RouteShape | null>(null)
   const [isLoadingRouteShape, setIsLoadingRouteShape] = useState(false)
@@ -73,6 +75,10 @@ function T789Page() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [etaErrorMessage, setEtaErrorMessage] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [isActiveGraceHeld, setIsActiveGraceHeld] = useState(false)
+  const [isEtaGraceHeld, setIsEtaGraceHeld] = useState(false)
+  const [lastNonEmptyActiveAt, setLastNonEmptyActiveAt] = useState<Date | null>(null)
+  const [lastNonEmptyEtaAt, setLastNonEmptyEtaAt] = useState<Date | null>(null)
 
   const selectedActiveBus =
     selectedBusNo === null
@@ -95,7 +101,15 @@ function T789Page() {
     routeStops?.stops,
   )
   const interactiveCardClassName =
-    'block w-full cursor-pointer rounded border p-2 text-left transition-colors outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]'
+    'block w-full cursor-pointer rounded-xl border border-amber-200/80 bg-white/70 p-2 text-left text-xs transition-colors outline-none focus-visible:border-amber-300 focus-visible:ring-2 focus-visible:ring-amber-200/60'
+
+  useEffect(() => {
+    activeBusesRef.current = activeBuses
+  }, [activeBuses])
+
+  useEffect(() => {
+    etasRef.current = etas
+  }, [etas])
 
   const normalizeT789Buses = (payload: unknown): T789Bus[] => {
     if (Array.isArray(payload)) {
@@ -121,22 +135,36 @@ function T789Page() {
         fetch(`${apiBaseUrl}/route/T7890/stops`),
       ])
 
-      if (!busesResponse.ok) {
+      let normalizedBuses: T789Bus[] = []
+      if (busesResponse.ok) {
+        const payload = (await busesResponse.json()) as unknown
+        normalizedBuses = normalizeT789Buses(payload)
+      } else {
         const fallbackMessage = 'Unable to fetch active T789 buses'
         const body = (await busesResponse.json().catch(() => null)) as {
           error?: string
         } | null
-        throw new Error(body?.error ?? fallbackMessage)
+        setErrorMessage(body?.error ?? fallbackMessage)
       }
 
-      const payload = (await busesResponse.json()) as unknown
-      const normalizedBuses = normalizeT789Buses(payload)
-      setActiveBuses(normalizedBuses)
+      const mergedBuses = mergeBusesWithGraceHold({
+        incoming: normalizedBuses,
+        previous: activeBusesRef.current,
+        fetchSucceeded: busesResponse.ok,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyActiveAtMsRef.current,
+      })
+      setActiveBuses(mergedBuses.buses)
+      setIsActiveGraceHeld(mergedBuses.isGraceHeld)
+      setLastNonEmptyActiveAt(
+        mergedBuses.lastNonEmptyAtMs === null
+          ? null
+          : new Date(mergedBuses.lastNonEmptyAtMs),
+      )
+      lastNonEmptyActiveAtMsRef.current = mergedBuses.lastNonEmptyAtMs
       setSelectedBusNo((current) => {
-        if (
-          current &&
-          normalizedBuses.some((bus) => bus.bus_no === current)
-        ) {
+        if (current && mergedBuses.buses.some((bus) => bus.bus_no === current)) {
           return current
         }
 
@@ -145,14 +173,44 @@ function T789Page() {
 
       if (etaResponse.ok) {
         const etaData = (await etaResponse.json()) as BusEta[]
-        setEtas(etaData)
+        const mergedEta = mergeBusesWithGraceHold({
+          incoming: etaData,
+          previous: etasRef.current,
+          fetchSucceeded: true,
+          nowMs: Date.now(),
+          graceWindowMs: BUS_GRACE_WINDOW_MS,
+          lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+        })
+        setEtas(mergedEta.buses)
+        setIsEtaGraceHeld(mergedEta.isGraceHeld)
+        setLastNonEmptyEtaAt(
+          mergedEta.lastNonEmptyAtMs === null
+            ? null
+            : new Date(mergedEta.lastNonEmptyAtMs),
+        )
+        lastNonEmptyEtaAtMsRef.current = mergedEta.lastNonEmptyAtMs
       } else {
         const fallbackMessage = 'Unable to fetch ETA to KL Gateway'
         const body = (await etaResponse.json().catch(() => null)) as {
           error?: string
         } | null
         setEtaErrorMessage(body?.error ?? fallbackMessage)
-        setEtas([])
+        const mergedEta = mergeBusesWithGraceHold({
+          incoming: [],
+          previous: etasRef.current,
+          fetchSucceeded: false,
+          nowMs: Date.now(),
+          graceWindowMs: BUS_GRACE_WINDOW_MS,
+          lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+        })
+        setEtas(mergedEta.buses)
+        setIsEtaGraceHeld(mergedEta.isGraceHeld)
+        setLastNonEmptyEtaAt(
+          mergedEta.lastNonEmptyAtMs === null
+            ? null
+            : new Date(mergedEta.lastNonEmptyAtMs),
+        )
+        lastNonEmptyEtaAtMsRef.current = mergedEta.lastNonEmptyAtMs
       }
 
       if (stopsResponse.ok) {
@@ -175,6 +233,39 @@ function T789Page() {
           ? error.message
           : 'Unable to fetch active T789 buses',
       )
+      const mergedBuses = mergeBusesWithGraceHold({
+        incoming: [],
+        previous: activeBusesRef.current,
+        fetchSucceeded: false,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyActiveAtMsRef.current,
+      })
+      setActiveBuses(mergedBuses.buses)
+      setIsActiveGraceHeld(mergedBuses.isGraceHeld)
+      setLastNonEmptyActiveAt(
+        mergedBuses.lastNonEmptyAtMs === null
+          ? null
+          : new Date(mergedBuses.lastNonEmptyAtMs),
+      )
+      lastNonEmptyActiveAtMsRef.current = mergedBuses.lastNonEmptyAtMs
+
+      const mergedEta = mergeBusesWithGraceHold({
+        incoming: [],
+        previous: etasRef.current,
+        fetchSucceeded: false,
+        nowMs: Date.now(),
+        graceWindowMs: BUS_GRACE_WINDOW_MS,
+        lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+      })
+      setEtas(mergedEta.buses)
+      setIsEtaGraceHeld(mergedEta.isGraceHeld)
+      setLastNonEmptyEtaAt(
+        mergedEta.lastNonEmptyAtMs === null
+          ? null
+          : new Date(mergedEta.lastNonEmptyAtMs),
+      )
+      lastNonEmptyEtaAtMsRef.current = mergedEta.lastNonEmptyAtMs
     } finally {
       setIsLoading(false)
     }
@@ -198,245 +289,235 @@ function T789Page() {
   }, [apiBaseUrl, targetStopId])
 
   useEffect(() => {
-    fetchT789Buses()
+    void fetchT789Buses()
     void fetchT789Shape()
 
     const id = setInterval(() => {
-      fetchT789Buses()
+      void fetchT789Buses()
     }, 15000)
 
     return () => clearInterval(id)
   }, [fetchT789Buses, fetchT789Shape])
 
+  const mapContent =
+    routeStops && routeShape ? (
+      <BusRouteMap
+        className="h-full"
+        fullScreen
+        showLegend={false}
+        stops={routeStops.stops}
+        polylinePoints={routePolylinePoints}
+        buses={activeBuses.map((bus) => ({
+          id: `${bus.route}-${bus.bus_no}`,
+          label: `Bus ${bus.bus_no}`,
+          lat: bus.latitude,
+          lon: bus.longitude,
+          isSelected: selectedBusNo === bus.bus_no,
+        }))}
+        currentStopId={selectedCurrentStopId}
+        targetStopId={targetStopId}
+      />
+    ) : (
+      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_12%,rgba(251,191,36,0.42),transparent_44%),radial-gradient(circle_at_84%_82%,rgba(34,211,238,0.22),transparent_38%),linear-gradient(115deg,#fff7ed_0%,#fffbeb_52%,#fef3c7_100%)] px-6 text-center text-slate-800">
+        <div>
+          <p className="font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-900">
+            T789 Live Route
+          </p>
+          <p className="mt-2 text-sm text-slate-700">
+            {isLoadingRouteShape
+              ? 'Loading route shape...'
+              : 'Waiting for route and bus data to render the map.'}
+          </p>
+        </div>
+      </div>
+    )
+
   return (
-    <main className="mx-auto max-w-4xl p-4 md:p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>T789 Route</CardTitle>
-          <CardDescription>Active buses for T789.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Button type="button" onClick={fetchT789Buses} disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <LoaderCircle className="animate-spin" />
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw />
-                  Refresh
-                </>
-              )}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              {lastUpdated
-                ? `Last updated: ${lastUpdated.toLocaleTimeString()}`
-                : 'No updates yet'}
+    <MapPanelShell
+      map={mapContent}
+      panelTitle="T789 Control Panel"
+      panelDescription="Monitor active T789 buses and ETA to KL Gateway."
+      panelStatus={
+        <div>
+          <p className="text-slate-600">
+            {lastUpdated
+              ? `Updated ${lastUpdated.toLocaleTimeString()}`
+              : 'No updates yet'}
+          </p>
+          {isActiveGraceHeld || isEtaGraceHeld ? (
+            <p className="text-xs text-amber-700">
+              Showing last live buses from{' '}
+              {lastNonEmptyActiveAt?.toLocaleTimeString() ??
+                lastNonEmptyEtaAt?.toLocaleTimeString() ??
+                'recent update'}{' '}
+              (temporary stale data)
             </p>
-          </div>
-
-          {errorMessage ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
-              <p className="inline-flex items-center gap-2 text-sm font-medium text-destructive">
-                <AlertTriangle className="h-4 w-4" />
-                Error
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {errorMessage}
-              </p>
-            </div>
           ) : null}
+        </div>
+      }
+      panelActions={
+        <Button
+          type="button"
+          onClick={() => void fetchT789Buses()}
+          disabled={isLoading}
+          className="w-full bg-amber-500 text-slate-900 hover:bg-amber-400"
+        >
+          {isLoading ? (
+            <>
+              <LoaderCircle className="animate-spin" />
+              Refreshing...
+            </>
+          ) : (
+            <>
+              <RefreshCw />
+              Refresh T789 Data
+            </>
+          )}
+        </Button>
+      }
+    >
+      {errorMessage ? (
+        <section className={panelSectionClass}>
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-700">
+            <AlertTriangle className="h-4 w-4" />
+            T789 Error
+          </p>
+          <p className="mt-1 text-xs text-slate-600">{errorMessage}</p>
+        </section>
+      ) : null}
 
-          {etaErrorMessage ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
-              <p className="inline-flex items-center gap-2 text-sm font-medium text-destructive">
-                <AlertTriangle className="h-4 w-4" />
-                ETA Error
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {etaErrorMessage}
-              </p>
-            </div>
-          ) : null}
+      {etaErrorMessage ? (
+        <section className={panelSectionClass}>
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-700">
+            <AlertTriangle className="h-4 w-4" />
+            ETA Error
+          </p>
+          <p className="mt-1 text-xs text-slate-600">{etaErrorMessage}</p>
+        </section>
+      ) : null}
 
-          <div className="rounded-md border p-3">
-            <p className="mb-2 text-sm font-medium">
-              All active T789 buses ({activeBuses.length})
-            </p>
-            {!isLoading && !errorMessage && activeBuses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No active T789 buses right now.
-              </p>
-            ) : null}
+      <section className={panelSectionClass}>
+        <p className="mb-2 text-sm font-medium text-amber-900">
+          All Active T789 Buses ({activeBuses.length})
+        </p>
+        {!isLoading && !errorMessage && activeBuses.length === 0 ? (
+          <p className="text-xs text-slate-600">No active T789 buses right now.</p>
+        ) : null}
 
-          {activeBuses.length > 0 ? (
-              <div className="space-y-2">
-                {activeBuses.map((bus) => (
-                  <button
-                    key={`${bus.route}-${bus.bus_no}`}
-                    type="button"
-                    onClick={() => setSelectedBusNo(bus.bus_no)}
-                    className={`${interactiveCardClassName} ${
-                      selectedBusNo === bus.bus_no
-                        ? 'border-foreground bg-secondary'
-                        : 'hover:bg-muted/40 active:bg-muted/60'
-                    }`}
-                  >
-                    <p className="font-medium">
-                      Bus {bus.bus_no} · Route {bus.route}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {bus.latitude.toFixed(5)}, {bus.longitude.toFixed(5)} ·{' '}
-                      {bus.speed.toFixed(1)} km/h
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Current stop:{' '}
-                      {bus.busstop_id
-                        ? stopNameById[bus.busstop_id] || bus.busstop_id
-                        : 'Unknown'}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-md border p-3">
-            <p className="mb-2 text-sm font-medium">ETA to KL Gateway</p>
-            {!isLoading && !etaErrorMessage && etas.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No ETA is available for KL Gateway right now.
-              </p>
-            ) : null}
-
-            {etas.length > 0 ? (
-              <div className="space-y-2">
-                {etas.map((eta) => (
-                  <button
-                    key={`${eta.route_id || 'T7890'}-${eta.bus_no}-${eta.current_stop_id}`}
-                    type="button"
-                    onClick={() => setSelectedBusNo(eta.bus_no)}
-                    className={`${interactiveCardClassName} ${
-                      selectedBusNo === eta.bus_no
-                        ? 'border-foreground bg-secondary'
-                        : 'hover:bg-muted/40 active:bg-muted/60'
-                    }`}
-                  >
-                    <p className="font-medium">
-                      Bus {eta.bus_no} · Route {eta.route_id || 'T7890'}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      ETA {eta.eta_minutes.toFixed(1)} min · {eta.stops_away}{' '}
-                      stops away · {eta.distance_km.toFixed(2)} km
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Current stop:{' '}
-                      {stopNameById[eta.current_stop_id] || eta.current_stop_id}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-md border p-3">
-            <p className="mb-2 text-sm font-medium">Live route map</p>
-            {isLoadingRouteShape ? (
-              <p className="text-sm text-muted-foreground">Loading route...</p>
-            ) : routeStops && routeShape ? (
-              <BusRouteMap
-                stops={routeStops.stops}
-                polylinePoints={routePolylinePoints}
-                buses={activeBuses.map((bus) => ({
-                  id: `${bus.route}-${bus.bus_no}`,
-                  label: `Bus ${bus.bus_no}`,
-                  lat: bus.latitude,
-                  lon: bus.longitude,
-                  isSelected: selectedBusNo === bus.bus_no,
-                }))}
-                currentStopId={selectedCurrentStopId}
-                targetStopId={targetStopId}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Route map is unavailable right now.
-              </p>
-            )}
-          </div>
-
-        </CardContent>
-      </Card>
-
-      <Dialog
-        open={selectedBusNo !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedBusNo(null)
-          }
-        }}
-        title={
-          selectedActiveBus
-            ? `Bus ${selectedActiveBus.bus_no} · Route ${selectedActiveBus.route}`
-            : 'T789 bus detail'
-        }
-        description="The current bus position and the KL Gateway target stop are highlighted on the route line."
-      >
-        {selectedActiveBus ? (
-          <div className="space-y-4">
-            {selectedEta ? (
-              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+        {activeBuses.length > 0 ? (
+          <div className="space-y-2">
+            {activeBuses.map((bus) => (
+              <button
+                key={`${bus.route}-${bus.bus_no}`}
+                type="button"
+                onClick={() => setSelectedBusNo(bus.bus_no)}
+                className={`${interactiveCardClassName} ${
+                  selectedBusNo === bus.bus_no
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-900'
+                    : 'hover:bg-amber-100/80 text-slate-800'
+                }`}
+              >
                 <p className="font-medium">
-                  ETA to {targetStopName}: {selectedEta.eta_minutes.toFixed(1)}{' '}
-                  min
+                  Bus {bus.bus_no} · Route {bus.route}
                 </p>
-                <p className="text-muted-foreground">
-                  {selectedEta.stops_away} stops away ·{' '}
-                  {selectedEta.distance_km.toFixed(2)} km remaining
+                <p className="text-slate-700">
+                  {bus.latitude.toFixed(5)}, {bus.longitude.toFixed(5)} ·{' '}
+                  {bus.speed.toFixed(1)} km/h
                 </p>
-              </div>
-            ) : (
-              <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-                No ETA to {targetStopName} is available for this bus right now.
-              </div>
-            )}
-
-            {isLoadingRouteShape ? (
-              <p className="text-sm text-muted-foreground">Loading route...</p>
-            ) : routeStops && routeShape ? (
-              <>
-                <BusRouteMap
-                  stops={routeStops.stops}
-                  polylinePoints={routePolylinePoints}
-                  buses={activeBuses.map((bus) => ({
-                    id: `${bus.route}-${bus.bus_no}`,
-                    label: `Bus ${bus.bus_no}`,
-                    lat: bus.latitude,
-                    lon: bus.longitude,
-                    isSelected: selectedBusNo === bus.bus_no,
-                  }))}
-                  currentStopId={selectedCurrentStopId}
-                  targetStopId={targetStopId}
-                />
-                <BusRouteLine
-                  routeShortName={routeStops.route_short_name}
-                  routeLongName={routeStops.route_long_name}
-                  stops={routeStops.stops}
-                  currentStopId={selectedCurrentStopId}
-                  currentSequence={selectedCurrentSequence}
-                  targetStopId={targetStopId}
-                  targetLabel="KL Gateway target stop"
-                />
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Route line is unavailable right now.
-              </p>
-            )}
+                <p className="text-slate-600">
+                  Current stop:{' '}
+                  {bus.busstop_id
+                    ? stopNameById[bus.busstop_id] || bus.busstop_id
+                    : 'Unknown'}
+                </p>
+              </button>
+            ))}
           </div>
         ) : null}
-      </Dialog>
-    </main>
+      </section>
+
+      <section className={panelSectionClass}>
+        <p className="mb-2 text-sm font-medium text-amber-900">
+          ETA To KL Gateway ({etas.length})
+        </p>
+        {!isLoading && !etaErrorMessage && etas.length === 0 ? (
+          <p className="text-xs text-slate-600">
+            No ETA is available for KL Gateway right now.
+          </p>
+        ) : null}
+
+        {etas.length > 0 ? (
+          <div className="space-y-2">
+            {etas.map((eta) => (
+              <button
+                key={`${eta.route_id || 'T7890'}-${eta.bus_no}-${eta.current_stop_id}`}
+                type="button"
+                onClick={() => setSelectedBusNo(eta.bus_no)}
+                className={`${interactiveCardClassName} ${
+                  selectedBusNo === eta.bus_no
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-900'
+                    : 'hover:bg-amber-100/80 text-slate-800'
+                }`}
+              >
+                <p className="font-medium">
+                  Bus {eta.bus_no} · Route {eta.route_id || 'T7890'}
+                </p>
+                <p className="text-slate-700">
+                  ETA {eta.eta_minutes.toFixed(1)} min · {eta.stops_away} stops away ·{' '}
+                  {eta.distance_km.toFixed(2)} km
+                </p>
+                <p className="text-slate-600">
+                  Current stop:{' '}
+                  {stopNameById[eta.current_stop_id] || eta.current_stop_id}
+                </p>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      {selectedActiveBus ? (
+        <section className={panelSectionClass}>
+          <p className="text-sm font-medium text-amber-900">
+            Selected Bus {selectedActiveBus.bus_no} · Route {selectedActiveBus.route}
+          </p>
+
+          {selectedEta ? (
+            <div className="mt-2 rounded-xl border border-amber-200/80 bg-white/72 p-2 text-xs text-slate-800">
+              <p className="font-medium">
+                ETA to {targetStopName}: {selectedEta.eta_minutes.toFixed(1)} min
+              </p>
+              <p className="text-slate-600">
+                {selectedEta.stops_away} stops away · {selectedEta.distance_km.toFixed(2)} km
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-600">
+              No ETA to {targetStopName} for this bus right now.
+            </p>
+          )}
+
+          {isLoadingRouteShape ? (
+            <p className="mt-3 text-xs text-slate-600">Loading route detail...</p>
+          ) : routeStops && routeShape ? (
+            <div className="mt-3">
+              <BusRouteLine
+                routeShortName={routeStops.route_short_name}
+                routeLongName={routeStops.route_long_name}
+                stops={routeStops.stops}
+                currentStopId={selectedCurrentStopId}
+                currentSequence={selectedCurrentSequence}
+                targetStopId={targetStopId}
+                targetLabel="KL Gateway target stop"
+              />
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-slate-600">
+              Route line is unavailable right now.
+            </p>
+          )}
+        </section>
+      ) : null}
+    </MapPanelShell>
   )
 }

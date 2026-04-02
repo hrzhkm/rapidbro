@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 type RouteMapStop = {
   stop_id: string
@@ -12,6 +13,12 @@ type RouteMapStop = {
 type BusRouteMapProps = {
   stops: RouteMapStop[]
   polylinePoints?: Array<[number, number]>
+  routeLayers?: Array<{
+    id: string
+    stops: RouteMapStop[]
+    polylinePoints?: Array<[number, number]>
+    color?: string
+  }>
   buses?: Array<{
     id: string
     label: string
@@ -21,6 +28,9 @@ type BusRouteMapProps = {
   }>
   currentStopId?: string | null
   targetStopId?: string | null
+  fullScreen?: boolean
+  showLegend?: boolean
+  showStopMarkers?: boolean
   className?: string
 }
 
@@ -37,6 +47,32 @@ type PolylineCompatibleStop = {
   stop_lon: number
 }
 
+type RoutePoint = [number, number]
+
+type RouteDirectionArrow = {
+  lat: number
+  lon: number
+  bearing: number
+}
+
+function getFitBoundsOptions(fullScreen: boolean) {
+  const basePadding: [number, number] = [24, 24]
+  if (typeof window === 'undefined') {
+    return { padding: basePadding }
+  }
+
+  const isDesktopViewport = window.matchMedia('(min-width: 768px)').matches
+  if (fullScreen && isDesktopViewport) {
+    // Keep route geometry centered in the visible map area when the side panel overlays the map.
+    return {
+      paddingTopLeft: basePadding,
+      paddingBottomRight: [460, 24] as [number, number],
+    }
+  }
+
+  return { padding: basePadding }
+}
+
 export function resolvePolylinePointsForRendering(
   stops: PolylineCompatibleStop[],
   polylinePoints: Array<[number, number]>,
@@ -48,11 +84,138 @@ export function resolvePolylinePointsForRendering(
   return stops.map((stop) => [stop.stop_lat, stop.stop_lon] as [number, number])
 }
 
+function getDistanceMeters(a: RoutePoint, b: RoutePoint): number {
+  const [lat1, lon1] = a
+  const [lat2, lon2] = b
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180
+  const earthRadiusMeters = 6_371_000
+  const deltaLat = toRadians(lat2 - lat1)
+  const deltaLon = toRadians(lon2 - lon1)
+  const startLat = toRadians(lat1)
+  const endLat = toRadians(lat2)
+
+  const haversine =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(startLat) *
+      Math.cos(endLat) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2)
+  const centralAngle = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+
+  return earthRadiusMeters * centralAngle
+}
+
+function getBearingDegrees(a: RoutePoint, b: RoutePoint): number {
+  const [lat1, lon1] = a
+  const [lat2, lon2] = b
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180
+  const toDegrees = (radians: number) => (radians * 180) / Math.PI
+
+  const phi1 = toRadians(lat1)
+  const phi2 = toRadians(lat2)
+  const lambdaDelta = toRadians(lon2 - lon1)
+  const y = Math.sin(lambdaDelta) * Math.cos(phi2)
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambdaDelta)
+  const theta = toDegrees(Math.atan2(y, x))
+
+  return (theta + 360) % 360
+}
+
+export function buildRouteDirectionArrows(
+  polylinePoints: RoutePoint[],
+  spacingMeters = 380,
+  maxArrows = 24,
+): RouteDirectionArrow[] {
+  if (polylinePoints.length < 2 || spacingMeters <= 0 || maxArrows <= 0) {
+    return []
+  }
+
+  const segments = polylinePoints
+    .slice(1)
+    .map((to, index) => {
+      const from = polylinePoints[index]
+      const lengthMeters = getDistanceMeters(from, to)
+      return {
+        from,
+        to,
+        lengthMeters,
+        bearing: getBearingDegrees(from, to),
+      }
+    })
+    .filter((segment) => segment.lengthMeters > 0)
+
+  if (segments.length === 0) {
+    return []
+  }
+
+  const totalLengthMeters = segments.reduce(
+    (sum, segment) => sum + segment.lengthMeters,
+    0,
+  )
+  if (totalLengthMeters <= 0) {
+    return []
+  }
+
+  const requestedArrowCount = Math.floor(totalLengthMeters / spacingMeters)
+  const arrowCount = Math.min(Math.max(requestedArrowCount, 1), maxArrows)
+  const intervalMeters = totalLengthMeters / (arrowCount + 1)
+  const arrows: RouteDirectionArrow[] = []
+
+  for (let index = 1; index <= arrowCount; index += 1) {
+    const targetDistance = intervalMeters * index
+    let traversedMeters = 0
+
+    for (const segment of segments) {
+      if (traversedMeters + segment.lengthMeters < targetDistance) {
+        traversedMeters += segment.lengthMeters
+        continue
+      }
+
+      const distanceInSegment = targetDistance - traversedMeters
+      const ratio = Math.min(
+        Math.max(distanceInSegment / segment.lengthMeters, 0),
+        1,
+      )
+      const lat = segment.from[0] + (segment.to[0] - segment.from[0]) * ratio
+      const lon = segment.from[1] + (segment.to[1] - segment.from[1]) * ratio
+
+      arrows.push({
+        lat,
+        lon,
+        bearing: segment.bearing,
+      })
+      break
+    }
+  }
+
+  return arrows
+}
+
+export function getRouteArrowRenderConfig(routeCount: number): {
+  spacingMeters: number
+  maxArrows: number
+} {
+  if (routeCount <= 1) {
+    return {
+      spacingMeters: 380,
+      maxArrows: 24,
+    }
+  }
+
+  // In all-routes overlays, reduce arrow density so route flow remains visible without clutter.
+  return {
+    spacingMeters: 1100,
+    maxArrows: 4,
+  }
+}
+
 async function loadLeaflet() {
   return import('leaflet')
 }
 
-function getBusMarkerScale(zoom: number): number {
+export function getBusMarkerScale(zoom: number): number {
   // Keep markers readable at low zoom while avoiding oversized overlap.
   if (zoom <= 13) return 0.72
   if (zoom <= 14) return 0.82
@@ -64,9 +227,13 @@ function getBusMarkerScale(zoom: number): number {
 function BusRouteMap({
   stops,
   polylinePoints = [],
+  routeLayers = [],
   buses = [],
   currentStopId = null,
   targetStopId = null,
+  fullScreen = false,
+  showLegend = true,
+  showStopMarkers = true,
   className,
 }: BusRouteMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
@@ -76,7 +243,7 @@ function BusRouteMap({
 
   useEffect(() => {
     hasFitBoundsRef.current = false
-  }, [stops, polylinePoints])
+  }, [stops, polylinePoints, routeLayers, showStopMarkers])
 
   useEffect(() => {
     let disposed = false
@@ -152,11 +319,32 @@ function BusRouteMap({
     let disposed = false
 
     const renderLayers = async () => {
-      const resolvedPolylinePoints = resolvePolylinePointsForRendering(
-        stops,
-        polylinePoints,
-      )
-      if (resolvedPolylinePoints.length < 2) {
+      const resolvedRouteLayers =
+        routeLayers.length > 0
+          ? routeLayers
+              .map((layer) => ({
+                id: layer.id,
+                color: layer.color ?? '#06b6d4',
+                stops: layer.stops,
+                polylinePoints: resolvePolylinePointsForRendering(
+                  layer.stops,
+                  layer.polylinePoints ?? [],
+                ),
+              }))
+              .filter((layer) => layer.polylinePoints.length > 1)
+          : [
+              {
+                id: 'default',
+                color: '#06b6d4',
+                stops,
+                polylinePoints: resolvePolylinePointsForRendering(
+                  stops,
+                  polylinePoints,
+                ),
+              },
+            ].filter((layer) => layer.polylinePoints.length > 1)
+
+      if (resolvedRouteLayers.length === 0) {
         return
       }
 
@@ -171,46 +359,89 @@ function BusRouteMap({
       }
 
       layerGroup.clearLayers()
-      const lineLatLngs = resolvedPolylinePoints.map(([lat, lon]) =>
-        leaflet.latLng(lat, lon),
+      const lineLatLngsByRoute = resolvedRouteLayers.map((layer) =>
+        layer.polylinePoints.map(([lat, lon]) => leaflet.latLng(lat, lon)),
       )
 
-      // High-contrast route line: dark casing + bright core.
-      leaflet
-        .polyline(lineLatLngs, {
-          color: '#0f172a',
-          weight: 8,
-          opacity: 0.85,
-          lineCap: 'round',
-          lineJoin: 'round',
-        })
-        .addTo(layerGroup)
-
-      leaflet
-        .polyline(lineLatLngs, {
-          color: '#06b6d4',
-          weight: 4,
-          opacity: 0.95,
-          lineCap: 'round',
-          lineJoin: 'round',
-        })
-        .addTo(layerGroup)
-
-      stops.forEach((stop) => {
-        const isCurrent = stop.stop_id === currentStopId
-        const isTarget = stop.stop_id === targetStopId
+      resolvedRouteLayers.forEach((routeLayer, routeIndex) => {
+        const lineLatLngs = lineLatLngsByRoute[routeIndex]
+        if (!lineLatLngs) {
+          return
+        }
 
         leaflet
-          .circleMarker([stop.stop_lat, stop.stop_lon], {
-            radius: isCurrent || isTarget ? 8 : 4,
-            color: isCurrent || isTarget ? '#78350f' : '#92400e',
-            weight: isCurrent || isTarget ? 3 : 2,
-            fillColor: isCurrent ? '#f59e0b' : isTarget ? '#f97316' : '#facc15',
-            fillOpacity: 0.95,
+          .polyline(lineLatLngs, {
+            color: '#0f172a',
+            weight: resolvedRouteLayers.length > 1 ? 7 : 8,
+            opacity: 0.75,
+            lineCap: 'round',
+            lineJoin: 'round',
           })
-          .bindTooltip(stop.stop_name)
+          .addTo(layerGroup)
+
+        leaflet
+          .polyline(lineLatLngs, {
+            color: routeLayer.color,
+            weight: resolvedRouteLayers.length > 1 ? 4 : 4.5,
+            opacity: 0.96,
+            lineCap: 'round',
+            lineJoin: 'round',
+          })
           .addTo(layerGroup)
       })
+
+      const arrowConfig = getRouteArrowRenderConfig(resolvedRouteLayers.length)
+      resolvedRouteLayers.forEach((routeLayer) => {
+        const directionArrows = buildRouteDirectionArrows(
+          routeLayer.polylinePoints,
+          arrowConfig.spacingMeters,
+          arrowConfig.maxArrows,
+        )
+        directionArrows.forEach((arrow) => {
+          leaflet
+            .marker([arrow.lat, arrow.lon], {
+              icon: leaflet.divIcon({
+                className: 'route-direction-arrow-icon',
+                html: `<div class="route-direction-arrow" style="--route-arrow-rotation:${arrow.bearing}deg"></div>`,
+                iconSize: [18, 18],
+                iconAnchor: [9, 9],
+              }),
+              keyboard: false,
+              interactive: false,
+            })
+            .addTo(layerGroup)
+        })
+      })
+
+      if (showStopMarkers) {
+        const seenStopIds = new Set<string>()
+        resolvedRouteLayers.forEach((routeLayer) => {
+          routeLayer.stops.forEach((stop) => {
+            if (seenStopIds.has(stop.stop_id)) {
+              return
+            }
+            seenStopIds.add(stop.stop_id)
+
+            const isCurrent = stop.stop_id === currentStopId
+            const isTarget = stop.stop_id === targetStopId
+
+            leaflet
+              .circleMarker([stop.stop_lat, stop.stop_lon], {
+                radius: isCurrent || isTarget ? 8 : 4,
+                color: isCurrent || isTarget ? '#78350f' : '#92400e',
+                weight: isCurrent || isTarget ? 3 : 2,
+                fillColor: isCurrent
+                  ? '#f59e0b'
+                  : isTarget
+                    ? '#f97316'
+                    : '#facc15',
+                fillOpacity: 0.95,
+              })
+              .bindTooltip(stop.stop_name)
+              .addTo(layerGroup)
+          })
+        })
+      }
 
       buses.forEach((bus) => {
         const markerScale = getBusMarkerScale(map.getZoom())
@@ -227,16 +458,19 @@ function BusRouteMap({
           .addTo(layerGroup)
       })
 
-      const boundsLatLngs =
-        stops.length > 1
-          ? [
-              ...lineLatLngs,
-              ...stops.map((stop) => leaflet.latLng(stop.stop_lat, stop.stop_lon)),
-              ...buses.map((bus) => leaflet.latLng(bus.lat, bus.lon)),
-            ]
-          : lineLatLngs
+      const allLineLatLngs = lineLatLngsByRoute.flat()
+      const stopLatLngs = showStopMarkers
+        ? resolvedRouteLayers.flatMap((routeLayer) =>
+            routeLayer.stops.map((stop) => leaflet.latLng(stop.stop_lat, stop.stop_lon)),
+          )
+        : []
+      const busLatLngs = buses.map((bus) => leaflet.latLng(bus.lat, bus.lon))
+      const boundsLatLngs = [...allLineLatLngs, ...stopLatLngs, ...busLatLngs]
       if (!hasFitBoundsRef.current) {
-        map.fitBounds(boundsLatLngs, { padding: [24, 24], animate: false })
+        map.fitBounds(boundsLatLngs, {
+          ...getFitBoundsOptions(fullScreen),
+          animate: false,
+        })
         hasFitBoundsRef.current = true
       }
 
@@ -250,9 +484,26 @@ function BusRouteMap({
     return () => {
       disposed = true
     }
-  }, [stops, polylinePoints, buses, currentStopId, targetStopId, mapReadyTick])
+  }, [
+    stops,
+    polylinePoints,
+    routeLayers,
+    buses,
+    currentStopId,
+    targetStopId,
+    fullScreen,
+    showStopMarkers,
+    mapReadyTick,
+  ])
 
-  if (stops.length < 2 && polylinePoints.length < 2) {
+  const hasRenderableSingleRoute = stops.length >= 2 || polylinePoints.length >= 2
+  const hasRenderableRouteLayers =
+    routeLayers.some(
+      (layer) =>
+        (layer.polylinePoints?.length ?? 0) >= 2 || layer.stops.length >= 2,
+    )
+
+  if (!hasRenderableSingleRoute && !hasRenderableRouteLayers) {
     return (
       <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
         Route map is unavailable because there are not enough points.
@@ -264,12 +515,17 @@ function BusRouteMap({
     <div className={className} data-testid="bus-route-map">
       <div
         ref={mapContainerRef}
-        className="bus-route-map rounded-md border"
+        className={cn(
+          'bus-route-map rounded-md border',
+          fullScreen ? 'is-fullscreen rounded-none border-0' : null,
+        )}
         aria-label="Bus route map"
       />
-      <p className="mt-2 text-xs text-muted-foreground">
-        Current bus and target stop are emphasized on the route.
-      </p>
+      {showLegend ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Current bus and target stop are emphasized on the route.
+        </p>
+      ) : null}
     </div>
   )
 }

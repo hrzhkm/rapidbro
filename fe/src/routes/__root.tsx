@@ -3,6 +3,7 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
+import { useEffect } from 'react'
 
 import Header from '../components/Header'
 
@@ -40,6 +41,28 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    if (!import.meta.env.PROD) {
+      return
+    }
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+      return
+    }
+
+    const registerServiceWorker = async () => {
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js', {
+          scope: '/',
+        })
+        void registration.update()
+      } catch {
+        // Service worker registration failures should not block app rendering.
+      }
+    }
+
+    void registerServiceWorker()
+  }, [])
+
   return (
     <html lang="en">
       <head>
@@ -47,7 +70,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <Header />
-        {children}
+        <div className="pt-14">{children}</div>
         <Scripts />
       </body>
     </html>

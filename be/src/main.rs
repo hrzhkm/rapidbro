@@ -201,6 +201,7 @@ struct AppState {
     gtfs_cache: Arc<GtfsCache>,
     bus_ttl_ms: i64,
     stale_after_ms: i64,
+    stationary_window_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -296,12 +297,12 @@ const REDIS_BUSES_LAST_SEEN_KEY: &str = "rapidbro:buses:last_seen";
 const REDIS_BUSES_MOTION_KEY: &str = "rapidbro:buses:motion";
 const REDIS_INGEST_LAST_KEY: &str = "rapidbro:ingestor:last_ingest_at";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1:6379/";
-const DEFAULT_BUS_TTL_SECONDS: i64 = 120;
+const DEFAULT_BUS_TTL_SECONDS: i64 = 300;
 const DEFAULT_STALE_AFTER_SECONDS: i64 = 20;
+const DEFAULT_STATIONARY_WINDOW_SECONDS: i64 = 300;
 const MAX_DERIVED_STOP_DISTANCE_KM: f64 = 0.75;
 const STATIONARY_SPEED_THRESHOLD_KMH: f64 = 1.0;
 const STATIONARY_DISTANCE_THRESHOLD_KM: f64 = 0.03;
-const STATIONARY_WINDOW_MS: i64 = 120_000;
 const PANTAI_HILLPARK_PHASE_5_STOP_ID: &str = "1008485";
 
 impl GtfsCache {
@@ -373,6 +374,10 @@ async fn main() {
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(DEFAULT_STALE_AFTER_SECONDS);
+    let stationary_window_seconds = env::var("STATIONARY_WINDOW_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(DEFAULT_STATIONARY_WINDOW_SECONDS);
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -415,6 +420,7 @@ async fn main() {
         gtfs_cache,
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
+        stationary_window_ms: stationary_window_seconds * 1_000,
     };
 
     let ingestor_state = app_state.clone();
@@ -935,7 +941,7 @@ async fn get_route_t789(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(&state).await?;
-    let visible_buses = filter_non_stationary_buses(&snapshot);
+    let visible_buses = filter_non_stationary_buses(&snapshot, state.stationary_window_ms);
     let route_stops = get_route_stops_from_cache("T7890", state.gtfs_cache.as_ref())
         .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
     let t789_buses: Vec<RouteBusPositionResponse> = visible_buses
@@ -1005,6 +1011,7 @@ async fn get_pantai_hillpark_phase_5_eta(
         &snapshot,
         state.gtfs_cache.as_ref(),
         PANTAI_HILLPARK_PHASE_5_STOP_ID,
+        state.stationary_window_ms,
     );
     let now_ms = now_unix_ms();
     let is_stale = match snapshot.last_ingest_at_unix_ms {
@@ -1056,7 +1063,12 @@ async fn get_stop_eta(
 ) -> Result<Json<Vec<BusEta>>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(&state).await?;
     let all_eta_results =
-        calculate_stop_eta_from_snapshot(&snapshot, state.gtfs_cache.as_ref(), &stop_id);
+        calculate_stop_eta_from_snapshot(
+            &snapshot,
+            state.gtfs_cache.as_ref(),
+            &stop_id,
+            state.stationary_window_ms,
+        );
 
     println!(
         "Calling get_stop_eta for stop_id={}: {} incoming buses",
@@ -1086,8 +1098,9 @@ fn calculate_stop_eta_from_snapshot(
     snapshot: &RedisBusSnapshot,
     gtfs: &GtfsCache,
     stop_id: &str,
+    stationary_window_ms: i64,
 ) -> Vec<BusEta> {
-    let visible_buses = filter_non_stationary_buses(snapshot);
+    let visible_buses = filter_non_stationary_buses(snapshot, stationary_window_ms);
     let mut all_eta_results: Vec<BusEta> = Vec::new();
     let mut seen_bus_route: HashSet<String> = HashSet::new();
 
@@ -1163,22 +1176,22 @@ fn update_bus_motion_state(
     }
 }
 
-fn is_bus_stationary(snapshot: &RedisBusSnapshot, bus_no: &str, now_ms: i64) -> bool {
+fn is_bus_stationary(snapshot: &RedisBusSnapshot, bus_no: &str, now_ms: i64, stationary_window_ms: i64) -> bool {
     snapshot
         .motion_states
         .get(bus_no)
         .and_then(|state| state.stationary_since_unix_ms)
-        .map(|since_ms| now_ms - since_ms >= STATIONARY_WINDOW_MS)
+        .map(|since_ms| now_ms - since_ms >= stationary_window_ms)
         .unwrap_or(false)
 }
 
-fn filter_non_stationary_buses(snapshot: &RedisBusSnapshot) -> Vec<BusPosition> {
+fn filter_non_stationary_buses(snapshot: &RedisBusSnapshot, stationary_window_ms: i64) -> Vec<BusPosition> {
     let now_ms = now_unix_ms();
 
     snapshot
         .buses
         .iter()
-        .filter(|bus| !is_bus_stationary(snapshot, &bus.bus_no, now_ms))
+        .filter(|bus| !is_bus_stationary(snapshot, &bus.bus_no, now_ms, stationary_window_ms))
         .cloned()
         .collect()
 }
@@ -1235,7 +1248,7 @@ async fn calculate_route_eta(
     target_stop_id: &str,
 ) -> Result<Vec<BusEta>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(state).await?;
-    let visible_buses = filter_non_stationary_buses(&snapshot);
+    let visible_buses = filter_non_stationary_buses(&snapshot, state.stationary_window_ms);
     let route_stops = get_route_stops_from_cache(route_id, state.gtfs_cache.as_ref())
         .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
 
@@ -1756,6 +1769,27 @@ async fn get_nearest_stop(
 mod tests {
     use super::*;
 
+    fn mock_bus(bus_no: &str) -> BusPosition {
+        BusPosition {
+            dt_received: None,
+            dt_gps: None,
+            latitude: 3.1,
+            longitude: 101.6,
+            dir: None,
+            speed: 0.0,
+            angle: 0.0,
+            route: "T7890".to_string(),
+            bus_no: bus_no.to_string(),
+            trip_no: None,
+            captain_id: None,
+            trip_rev_kind: None,
+            engine_status: 1,
+            accessibility: 1,
+            busstop_id: None,
+            provider: "RKL".to_string(),
+        }
+    }
+
     #[test]
     fn gtfs_cache_builds_with_expected_indexes() {
         let cache = GtfsCache::build().expect("cache should build from GTFS files");
@@ -1798,5 +1832,48 @@ mod tests {
                 .then(a.route_id.cmp(&b.route_id))
         });
         assert_eq!(routes, sorted, "routes must be stable-sorted");
+    }
+
+    #[test]
+    fn stationarity_boundary_uses_configured_window() {
+        let window_ms = 300_000;
+        let now_ms = 1_000_000;
+        let mut motion_states = HashMap::new();
+        motion_states.insert(
+            "BUS-A".to_string(),
+            BusMotionState {
+                reference_lat: 3.1,
+                reference_lon: 101.6,
+                stationary_since_unix_ms: Some(now_ms - window_ms),
+            },
+        );
+        motion_states.insert(
+            "BUS-B".to_string(),
+            BusMotionState {
+                reference_lat: 3.1,
+                reference_lon: 101.6,
+                stationary_since_unix_ms: Some(now_ms - (window_ms - 1)),
+            },
+        );
+
+        let snapshot = RedisBusSnapshot {
+            buses: vec![mock_bus("BUS-A"), mock_bus("BUS-B"), mock_bus("BUS-C")],
+            motion_states,
+            active_bus_count: 3,
+            last_ingest_at_unix_ms: Some(now_ms),
+        };
+
+        assert!(
+            is_bus_stationary(&snapshot, "BUS-A", now_ms, window_ms),
+            "bus exactly at threshold should be treated as stationary"
+        );
+        assert!(
+            !is_bus_stationary(&snapshot, "BUS-B", now_ms, window_ms),
+            "bus below threshold should not be treated as stationary"
+        );
+        assert!(
+            !is_bus_stationary(&snapshot, "BUS-C", now_ms, window_ms),
+            "bus with no motion state should not be treated as stationary"
+        );
     }
 }
