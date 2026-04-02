@@ -59,3 +59,25 @@
     @apply m-0 bg-background text-foreground antialiased;
   }
 }
+
+.bus-route-map {
+  height: 22rem;
+  width: 100%;
+  background: radial-gradient(
+    circle at 20% 20%,
+    rgba(255, 255, 255, 0.95),
+    rgba(254, 243, 199, 0.55) 42%,
+    rgba(254, 215, 170, 0.35) 100%
+  );
+}
+
+.bus-route-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  font: inherit;
+}
+
+.bus-route-map .leaflet-control-attribution {
+  font-size: 0.625rem;
+}

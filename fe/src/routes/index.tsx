@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, LoaderCircle, LocateFixed, MapPin } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { Button } from '@/components/ui/button'
 import {
@@ -84,6 +85,9 @@ function App() {
   const [routeStopsByRoute, setRouteStopsByRoute] = useState<
     Record<string, RouteStopsResponse>
   >({})
+  const [selectedMapRouteId, setSelectedMapRouteId] = useState<string | null>(
+    null,
+  )
   const [selectedBusKey, setSelectedBusKey] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingEta, setIsLoadingEta] = useState(false)
@@ -109,6 +113,9 @@ function App() {
   const selectedRouteStops = selectedBus
     ? routeStopsByRoute[selectedBus.route_id] ?? null
     : null
+  const selectedMapRouteStops = selectedMapRouteId
+    ? routeStopsByRoute[selectedMapRouteId] ?? null
+    : null
 
   const fetchNearestStop = async (lat: number, lon: number) => {
     const params = new URLSearchParams({
@@ -133,8 +140,6 @@ function App() {
 
   const fetchEtaToStop = async (stopId: string) => {
     setEtaErrorMessage(null)
-    setNearestStopEta([])
-    setSelectedBusKey(null)
     setSelectedRouteErrorMessage(null)
     setIsLoadingEta(true)
 
@@ -152,7 +157,6 @@ function App() {
 
       const data = (await response.json()) as BusEta[]
       setNearestStopEta(data)
-      setSelectedBusKey(null)
     } catch (error) {
       setEtaErrorMessage(
         error instanceof Error
@@ -183,6 +187,12 @@ function App() {
 
       const data = (await response.json()) as StopRoutesResponse
       setStopRoutes(data.routes)
+      const initialRouteId = data.routes[0]?.route_id ?? null
+      setSelectedMapRouteId(initialRouteId)
+
+      if (initialRouteId) {
+        await fetchRouteStops(initialRouteId)
+      }
     } catch (error) {
       setRouteErrorMessage(
         error instanceof Error
@@ -232,6 +242,7 @@ function App() {
 
   const handleSelectBus = async (eta: BusEta) => {
     setSelectedBusKey(getBusKey(eta))
+    setSelectedMapRouteId(eta.route_id)
     setSelectedRouteErrorMessage(null)
 
     if (routeStopsByRoute[eta.route_id]) {
@@ -245,20 +256,45 @@ function App() {
     }
   }
 
-  const handleFindNearestStop = () => {
+  const handleSelectMapRoute = async (routeId: string) => {
+    setSelectedMapRouteId(routeId)
+    setSelectedRouteErrorMessage(null)
+
+    if (routeStopsByRoute[routeId]) {
+      return
+    }
+
+    try {
+      await fetchRouteStops(routeId)
+    } catch {
+      // Map route error is shown via selectedRouteErrorMessage.
+    }
+  }
+
+  const handleFindNearestStop = ({
+    preserveCurrentData = false,
+  }: {
+    preserveCurrentData?: boolean
+  } = {}) => {
     setErrorMessage(null)
     setEtaErrorMessage(null)
     setRouteErrorMessage(null)
     setSelectedRouteErrorMessage(null)
-    setNearestStop(null)
-    setNearestStopEta([])
-    setStopRoutes([])
-    setRouteStopsByRoute({})
-    setSelectedBusKey(null)
-    setIsLoading(true)
+
+    if (!preserveCurrentData) {
+      setNearestStop(null)
+      setNearestStopEta([])
+      setStopRoutes([])
+      setRouteStopsByRoute({})
+      setSelectedMapRouteId(null)
+      setSelectedBusKey(null)
+      setIsLoading(true)
+    }
 
     if (!('geolocation' in navigator)) {
-      setIsLoading(false)
+      if (!preserveCurrentData) {
+        setIsLoading(false)
+      }
       setErrorMessage('Geolocation is not supported by this browser.')
       return
     }
@@ -283,11 +319,15 @@ function App() {
               : 'Unable to fetch nearest bus stop',
           )
         } finally {
-          setIsLoading(false)
+          if (!preserveCurrentData) {
+            setIsLoading(false)
+          }
         }
       },
       (error) => {
-        setIsLoading(false)
+        if (!preserveCurrentData) {
+          setIsLoading(false)
+        }
         setErrorMessage(error.message || 'Unable to read your location.')
       },
       {
@@ -309,7 +349,7 @@ function App() {
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      handleFindNearestStop()
+      handleFindNearestStop({ preserveCurrentData: true })
     }, 30000)
 
     return () => window.clearInterval(id)
@@ -421,9 +461,15 @@ function App() {
                 {!isLoadingRoutes && stopRoutes.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {stopRoutes.map((route) => (
-                      <div
+                      <button
                         key={route.route_id}
-                        className="rounded-md border bg-background px-3 py-2 text-sm"
+                        type="button"
+                        onClick={() => handleSelectMapRoute(route.route_id)}
+                        className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                          selectedMapRouteId === route.route_id
+                            ? 'border-foreground bg-secondary'
+                            : 'bg-background hover:bg-muted/40'
+                        }`}
                       >
                         <p className="font-medium">
                           {route.route_short_name || route.route_id}
@@ -431,8 +477,46 @@ function App() {
                         <p className="text-muted-foreground">
                           {route.route_long_name}
                         </p>
-                      </div>
+                      </button>
                     ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-4 rounded-md border bg-muted/30 p-3">
+                <p className="text-sm font-medium">Nearest stop map</p>
+                {selectedMapRouteId && !selectedMapRouteStops ? (
+                  <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Loading map route...
+                  </p>
+                ) : null}
+                {selectedRouteErrorMessage && !selectedMapRouteStops ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {selectedRouteErrorMessage}
+                  </p>
+                ) : null}
+                {!selectedMapRouteId && !isLoadingRoutes ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No route is available to render on the map.
+                  </p>
+                ) : null}
+                {selectedMapRouteStops ? (
+                  <div className="mt-2">
+                    <BusRouteMap
+                      stops={selectedMapRouteStops.stops}
+                      currentStopId={
+                        selectedBus?.route_id === selectedMapRouteId
+                          ? selectedBus.current_stop_id
+                          : null
+                      }
+                      targetStopId={nearestStop.stop_id}
+                    />
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Map route:{' '}
+                      {selectedMapRouteStops.route_short_name ||
+                        selectedMapRouteStops.route_id}
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -546,18 +630,25 @@ function App() {
             ) : null}
 
             {selectedRouteStops ? (
-              <BusRouteLine
-                routeShortName={
-                  selectedRouteStops.route_short_name ||
-                  selectedRouteStops.route_id
-                }
-                routeLongName={selectedRouteStops.route_long_name}
-                stops={selectedRouteStops.stops}
-                currentStopId={selectedBus.current_stop_id}
-                currentSequence={selectedBus.current_sequence}
-                targetStopId={nearestStop?.stop_id ?? null}
-                targetLabel="Your selected nearest stop"
-              />
+              <>
+                <BusRouteMap
+                  stops={selectedRouteStops.stops}
+                  currentStopId={selectedBus.current_stop_id}
+                  targetStopId={nearestStop?.stop_id ?? null}
+                />
+                <BusRouteLine
+                  routeShortName={
+                    selectedRouteStops.route_short_name ||
+                    selectedRouteStops.route_id
+                  }
+                  routeLongName={selectedRouteStops.route_long_name}
+                  stops={selectedRouteStops.stops}
+                  currentStopId={selectedBus.current_stop_id}
+                  currentSequence={selectedBus.current_sequence}
+                  targetStopId={nearestStop?.stop_id ?? null}
+                  targetLabel="Your selected nearest stop"
+                />
+              </>
             ) : null}
           </div>
         ) : null}

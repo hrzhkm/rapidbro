@@ -1,0 +1,176 @@
+import { useEffect, useRef } from 'react'
+
+type RouteMapStop = {
+  stop_id: string
+  stop_name: string
+  stop_lat: number
+  stop_lon: number
+}
+
+type BusRouteMapProps = {
+  stops: RouteMapStop[]
+  currentStopId?: string | null
+  targetStopId?: string | null
+  className?: string
+}
+
+type LeafletModule = typeof import('leaflet')
+
+type LeafletState = {
+  leaflet: LeafletModule
+  map: import('leaflet').Map
+  layerGroup: import('leaflet').LayerGroup
+}
+
+async function loadLeaflet() {
+  await import('leaflet/dist/leaflet.css')
+  return import('leaflet')
+}
+
+function BusRouteMap({
+  stops,
+  currentStopId = null,
+  targetStopId = null,
+  className,
+}: BusRouteMapProps) {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  const leafletStateRef = useRef<LeafletState | null>(null)
+  const hasFitBoundsRef = useRef(false)
+
+  useEffect(() => {
+    hasFitBoundsRef.current = false
+  }, [stops])
+
+  useEffect(() => {
+    let disposed = false
+
+    const setupMap = async () => {
+      if (typeof window === 'undefined' || !mapContainerRef.current) {
+        return
+      }
+      if (leafletStateRef.current) {
+        return
+      }
+
+      const leaflet = await loadLeaflet()
+      if (disposed || !mapContainerRef.current) {
+        return
+      }
+
+      const map = leaflet.map(mapContainerRef.current, {
+        zoomControl: true,
+        attributionControl: true,
+      })
+
+      leaflet
+        .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+        })
+        .addTo(map)
+
+      const layerGroup = leaflet.layerGroup().addTo(map)
+      leafletStateRef.current = { leaflet, map, layerGroup }
+
+      requestAnimationFrame(() => {
+        map.invalidateSize()
+      })
+    }
+
+    setupMap()
+
+    return () => {
+      disposed = true
+      const state = leafletStateRef.current
+      state?.layerGroup.clearLayers()
+      state?.map.remove()
+      leafletStateRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+
+    const renderLayers = async () => {
+      if (stops.length < 2) {
+        return
+      }
+
+      const state = leafletStateRef.current
+      if (!state) {
+        return
+      }
+
+      const { leaflet, map, layerGroup } = state
+      if (disposed) {
+        return
+      }
+
+      layerGroup.clearLayers()
+      const latLngs = stops.map((stop) =>
+        leaflet.latLng(stop.stop_lat, stop.stop_lon),
+      )
+
+      leaflet
+        .polyline(latLngs, {
+          color: '#d9f99d',
+          weight: 6,
+          opacity: 0.9,
+        })
+        .addTo(layerGroup)
+
+      stops.forEach((stop) => {
+        const isCurrent = stop.stop_id === currentStopId
+        const isTarget = stop.stop_id === targetStopId
+
+        leaflet
+          .circleMarker([stop.stop_lat, stop.stop_lon], {
+            radius: isCurrent || isTarget ? 8 : 4,
+            color: isCurrent || isTarget ? '#78350f' : '#92400e',
+            weight: isCurrent || isTarget ? 3 : 2,
+            fillColor: isCurrent ? '#f59e0b' : isTarget ? '#f97316' : '#eab308',
+            fillOpacity: 0.95,
+          })
+          .bindTooltip(stop.stop_name)
+          .addTo(layerGroup)
+      })
+
+      if (!hasFitBoundsRef.current) {
+        map.fitBounds(latLngs, { padding: [24, 24], animate: false })
+        hasFitBoundsRef.current = true
+      }
+
+      requestAnimationFrame(() => {
+        map.invalidateSize()
+      })
+    }
+
+    renderLayers()
+
+    return () => {
+      disposed = true
+    }
+  }, [stops, currentStopId, targetStopId])
+
+  if (stops.length < 2) {
+    return (
+      <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
+        Route map is unavailable because there are not enough points.
+      </div>
+    )
+  }
+
+  return (
+    <div className={className} data-testid="bus-route-map">
+      <div
+        ref={mapContainerRef}
+        className="bus-route-map rounded-md border"
+        aria-label="Bus route map"
+      />
+      <p className="mt-2 text-xs text-muted-foreground">
+        Current bus and target stop are emphasized on the route.
+      </p>
+    </div>
+  )
+}
+
+export { BusRouteMap }

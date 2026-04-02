@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertTriangle, LoaderCircle, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { Button } from '@/components/ui/button'
 import {
@@ -312,6 +313,21 @@ function T789Page() {
             ) : null}
           </div>
 
+          <div className="rounded-md border p-3">
+            <p className="mb-2 text-sm font-medium">Live route map</p>
+            {routeStops ? (
+              <BusRouteMap
+                stops={routeStops.stops}
+                currentStopId={selectedCurrentStopId}
+                targetStopId={targetStopId}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Route map is unavailable right now.
+              </p>
+            )}
+          </div>
+
         </CardContent>
       </Card>
 
@@ -349,15 +365,22 @@ function T789Page() {
             )}
 
             {routeStops ? (
-              <BusRouteLine
-                routeShortName={routeStops.route_short_name}
-                routeLongName={routeStops.route_long_name}
-                stops={routeStops.stops}
-                currentStopId={selectedCurrentStopId}
-                currentSequence={selectedCurrentSequence}
-                targetStopId={targetStopId}
-                targetLabel="KL Gateway target stop"
-              />
+              <>
+                <BusRouteMap
+                  stops={routeStops.stops}
+                  currentStopId={selectedCurrentStopId}
+                  targetStopId={targetStopId}
+                />
+                <BusRouteLine
+                  routeShortName={routeStops.route_short_name}
+                  routeLongName={routeStops.route_long_name}
+                  stops={routeStops.stops}
+                  currentStopId={selectedCurrentStopId}
+                  currentSequence={selectedCurrentSequence}
+                  targetStopId={targetStopId}
+                  targetLabel="KL Gateway target stop"
+                />
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Route line is unavailable right now.
