@@ -550,17 +550,15 @@ function App() {
                     <BusRouteMap
                       stops={selectedMapRouteStops.stops}
                       polylinePoints={selectedMapRoutePolylinePoints}
-                      buses={nearestStopEta
-                        .filter((eta) => eta.route_id === selectedMapRouteId)
-                        .map((eta) => ({
-                          id: getBusKey(eta),
-                          label: `Bus ${eta.bus_no}`,
-                          lat: eta.current_lat,
-                          lon: eta.current_lon,
-                          isSelected:
-                            selectedBusKey !== null &&
-                            selectedBusKey === getBusKey(eta),
-                        }))}
+                      buses={nearestStopEta.map((eta) => ({
+                        id: getBusKey(eta),
+                        label: `Bus ${eta.bus_no}`,
+                        lat: eta.current_lat,
+                        lon: eta.current_lon,
+                        isSelected:
+                          selectedBusKey !== null &&
+                          selectedBusKey === getBusKey(eta),
+                      }))}
                       currentStopId={
                         selectedBus?.route_id === selectedMapRouteId
                           ? selectedBus.current_stop_id
