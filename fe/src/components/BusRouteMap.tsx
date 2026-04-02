@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type RouteMapStop = {
   stop_id: string
@@ -54,6 +54,7 @@ function BusRouteMap({
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const leafletStateRef = useRef<LeafletState | null>(null)
   const hasFitBoundsRef = useRef(false)
+  const [mapReadyTick, setMapReadyTick] = useState(0)
 
   useEffect(() => {
     hasFitBoundsRef.current = false
@@ -113,6 +114,8 @@ function BusRouteMap({
       requestAnimationFrame(() => {
         map.invalidateSize()
         applyBusMarkerScale()
+        // Ensure route layers are rendered once the async Leaflet map is ready.
+        setMapReadyTick((current) => current + 1)
       })
     }
 
@@ -230,7 +233,7 @@ function BusRouteMap({
     return () => {
       disposed = true
     }
-  }, [stops, polylinePoints, buses, currentStopId, targetStopId])
+  }, [stops, polylinePoints, buses, currentStopId, targetStopId, mapReadyTick])
 
   if (stops.length < 2 && polylinePoints.length < 2) {
     return (

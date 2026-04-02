@@ -66,6 +66,7 @@ function T789Page() {
   const [etas, setEtas] = useState<BusEta[]>([])
   const [routeStops, setRouteStops] = useState<RouteStopsResponse | null>(null)
   const [routeShape, setRouteShape] = useState<RouteShape | null>(null)
+  const [isLoadingRouteShape, setIsLoadingRouteShape] = useState(false)
   const [stopNameById, setStopNameById] = useState<Record<string, string>>({})
   const [selectedBusNo, setSelectedBusNo] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -180,15 +181,20 @@ function T789Page() {
   }, [apiBaseUrl])
 
   const fetchT789Shape = useCallback(async () => {
-    const response = await fetch(
-      `${apiBaseUrl}/route/T7890/shape?stop_id=${encodeURIComponent(targetStopId)}`,
-    )
-    if (!response.ok) {
-      return
-    }
+    setIsLoadingRouteShape(true)
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/route/T7890/shape?stop_id=${encodeURIComponent(targetStopId)}`,
+      )
+      if (!response.ok) {
+        return
+      }
 
-    const shapeData = (await response.json()) as RouteShape
-    setRouteShape(shapeData)
+      const shapeData = (await response.json()) as RouteShape
+      setRouteShape(shapeData)
+    } finally {
+      setIsLoadingRouteShape(false)
+    }
   }, [apiBaseUrl, targetStopId])
 
   useEffect(() => {
@@ -337,7 +343,9 @@ function T789Page() {
 
           <div className="rounded-md border p-3">
             <p className="mb-2 text-sm font-medium">Live route map</p>
-            {routeStops ? (
+            {isLoadingRouteShape ? (
+              <p className="text-sm text-muted-foreground">Loading route...</p>
+            ) : routeStops && routeShape ? (
               <BusRouteMap
                 stops={routeStops.stops}
                 polylinePoints={routePolylinePoints}
@@ -394,7 +402,9 @@ function T789Page() {
               </div>
             )}
 
-            {routeStops ? (
+            {isLoadingRouteShape ? (
+              <p className="text-sm text-muted-foreground">Loading route...</p>
+            ) : routeStops && routeShape ? (
               <>
                 <BusRouteMap
                   stops={routeStops.stops}

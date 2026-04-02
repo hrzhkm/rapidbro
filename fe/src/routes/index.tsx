@@ -93,6 +93,9 @@ function App() {
   const [routeShapesByKey, setRouteShapesByKey] = useState<
     Record<string, RouteShape>
   >({})
+  const [loadingRouteShapesByKey, setLoadingRouteShapesByKey] = useState<
+    Record<string, boolean>
+  >({})
   const [selectedMapRouteId, setSelectedMapRouteId] = useState<string | null>(
     null,
   )
@@ -136,6 +139,18 @@ function App() {
   const selectedRouteShape = selectedBus
     ? getRouteShape(selectedBus.route_id, nearestStop?.stop_id)
     : null
+  const selectedMapRouteShapeCacheKey = selectedMapRouteId
+    ? getRouteShapeCacheKey(selectedMapRouteId, nearestStop?.stop_id)
+    : null
+  const selectedRouteShapeCacheKey = selectedBus
+    ? getRouteShapeCacheKey(selectedBus.route_id, nearestStop?.stop_id)
+    : null
+  const isLoadingSelectedMapRouteShape = selectedMapRouteShapeCacheKey
+    ? loadingRouteShapesByKey[selectedMapRouteShapeCacheKey] === true
+    : false
+  const isLoadingSelectedRouteShape = selectedRouteShapeCacheKey
+    ? loadingRouteShapesByKey[selectedRouteShapeCacheKey] === true
+    : false
   const selectedMapRoutePolylinePoints = buildRoutePolylinePoints(
     selectedMapRouteShape,
     selectedMapRouteStops?.stops,
@@ -219,8 +234,10 @@ function App() {
       setSelectedMapRouteId(initialRouteId)
 
       if (initialRouteId) {
-        void fetchRouteStops(initialRouteId)
-        void fetchRouteShape(initialRouteId, stopId)
+        await Promise.all([
+          fetchRouteStops(initialRouteId),
+          fetchRouteShape(initialRouteId, stopId),
+        ])
       }
     } catch (error) {
       setRouteErrorMessage(
@@ -275,24 +292,42 @@ function App() {
       return routeShapesByKey[cacheKey]
     }
 
-    const params = stopId ? `?stop_id=${encodeURIComponent(stopId)}` : ''
-    const response = await fetch(
-      `${apiBaseUrl}/route/${encodeURIComponent(routeId)}/shape${params}`,
-    )
-    if (!response.ok) {
-      const fallbackMessage = 'Unable to fetch route shape'
-      const body = (await response.json().catch(() => null)) as {
-        error?: string
-      } | null
-      throw new Error(body?.error ?? fallbackMessage)
-    }
-
-    const data = (await response.json()) as RouteShape
-    setRouteShapesByKey((current) => ({
+    setLoadingRouteShapesByKey((current) => ({
       ...current,
-      [cacheKey]: data,
+      [cacheKey]: true,
     }))
-    return data
+    setSelectedRouteErrorMessage(null)
+
+    try {
+      const params = stopId ? `?stop_id=${encodeURIComponent(stopId)}` : ''
+      const response = await fetch(
+        `${apiBaseUrl}/route/${encodeURIComponent(routeId)}/shape${params}`,
+      )
+      if (!response.ok) {
+        const fallbackMessage = 'Unable to fetch route shape'
+        const body = (await response.json().catch(() => null)) as {
+          error?: string
+        } | null
+        throw new Error(body?.error ?? fallbackMessage)
+      }
+
+      const data = (await response.json()) as RouteShape
+      setRouteShapesByKey((current) => ({
+        ...current,
+        [cacheKey]: data,
+      }))
+      return data
+    } catch (error) {
+      setSelectedRouteErrorMessage(
+        error instanceof Error ? error.message : 'Unable to fetch route shape',
+      )
+      throw error
+    } finally {
+      setLoadingRouteShapesByKey((current) => ({
+        ...current,
+        [cacheKey]: false,
+      }))
+    }
   }
 
   const handleSelectBus = async (eta: BusEta) => {
@@ -529,13 +564,18 @@ function App() {
 
               <div className="mt-4 rounded-md border bg-muted/30 p-3">
                 <p className="text-sm font-medium">Nearest stop map</p>
-                {selectedMapRouteId && !selectedMapRouteStops ? (
+                {selectedMapRouteId &&
+                (!selectedMapRouteStops ||
+                  isLoadingSelectedMapRouteShape ||
+                  !selectedMapRouteShape) ? (
                   <p className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Loading map route...
+                    Loading route...
                   </p>
                 ) : null}
-                {selectedRouteErrorMessage && !selectedMapRouteStops ? (
+                {selectedRouteErrorMessage &&
+                !isLoadingSelectedMapRouteShape &&
+                (!selectedMapRouteStops || !selectedMapRouteShape) ? (
                   <p className="mt-2 text-sm text-destructive">
                     {selectedRouteErrorMessage}
                   </p>
@@ -545,7 +585,7 @@ function App() {
                     No route is available to render on the map.
                   </p>
                 ) : null}
-                {selectedMapRouteStops ? (
+                {selectedMapRouteStops && selectedMapRouteShape ? (
                   <div className="mt-2">
                     <BusRouteMap
                       stops={selectedMapRouteStops.stops}
@@ -670,10 +710,12 @@ function App() {
               </p>
             </div>
 
-            {isLoadingSelectedRoute ? (
+            {isLoadingSelectedRoute ||
+            isLoadingSelectedRouteShape ||
+            (selectedRouteStops && !selectedRouteShape) ? (
               <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
-                Loading route line...
+                Loading route...
               </p>
             ) : null}
 
@@ -683,7 +725,7 @@ function App() {
               </p>
             ) : null}
 
-            {selectedRouteStops ? (
+            {selectedRouteStops && selectedRouteShape ? (
               <>
                 <BusRouteMap
                   stops={selectedRouteStops.stops}
