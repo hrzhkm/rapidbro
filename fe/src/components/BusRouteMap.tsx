@@ -10,6 +10,13 @@ type RouteMapStop = {
 type BusRouteMapProps = {
   stops: RouteMapStop[]
   polylinePoints?: Array<[number, number]>
+  buses?: Array<{
+    id: string
+    label: string
+    lat: number
+    lon: number
+    isSelected?: boolean
+  }>
   currentStopId?: string | null
   targetStopId?: string | null
   className?: string
@@ -27,9 +34,19 @@ async function loadLeaflet() {
   return import('leaflet')
 }
 
+function getBusMarkerScale(zoom: number): number {
+  // Keep markers readable at low zoom while avoiding oversized overlap.
+  if (zoom <= 13) return 0.72
+  if (zoom <= 14) return 0.82
+  if (zoom <= 15) return 0.92
+  if (zoom <= 16) return 1
+  return 1.08
+}
+
 function BusRouteMap({
   stops,
   polylinePoints = [],
+  buses = [],
   currentStopId = null,
   targetStopId = null,
   className,
@@ -76,11 +93,26 @@ function BusRouteMap({
         })
         .addTo(map)
 
+      const applyBusMarkerScale = () => {
+        const scale = getBusMarkerScale(map.getZoom()).toString()
+        if (!mapContainerRef.current) {
+          return
+        }
+
+        const busElements =
+          mapContainerRef.current.querySelectorAll<HTMLElement>('.bus-live-marker')
+        busElements.forEach((element) => {
+          element.style.setProperty('--bus-marker-scale', scale)
+        })
+      }
+      map.on('zoomend', applyBusMarkerScale)
+
       const layerGroup = leaflet.layerGroup().addTo(map)
       leafletStateRef.current = { leaflet, map, layerGroup }
 
       requestAnimationFrame(() => {
         map.invalidateSize()
+        applyBusMarkerScale()
       })
     }
 
@@ -160,11 +192,27 @@ function BusRouteMap({
           .addTo(layerGroup)
       })
 
+      buses.forEach((bus) => {
+        const markerScale = getBusMarkerScale(map.getZoom())
+        leaflet
+          .marker([bus.lat, bus.lon], {
+            icon: leaflet.divIcon({
+              className: 'bus-live-marker-icon',
+              html: `<div class="bus-live-marker${bus.isSelected ? ' is-selected' : ''}" style="--bus-marker-scale:${markerScale}"><img src="/bus-icon.png" alt="" class="bus-live-marker-image" /></div>`,
+              iconSize: [44, 44],
+              iconAnchor: [22, 22],
+            }),
+          })
+          .bindTooltip(bus.label)
+          .addTo(layerGroup)
+      })
+
       const boundsLatLngs =
         stops.length > 1
           ? [
               ...lineLatLngs,
               ...stops.map((stop) => leaflet.latLng(stop.stop_lat, stop.stop_lon)),
+              ...buses.map((bus) => leaflet.latLng(bus.lat, bus.lon)),
             ]
           : lineLatLngs
       if (!hasFitBoundsRef.current) {
@@ -182,7 +230,7 @@ function BusRouteMap({
     return () => {
       disposed = true
     }
-  }, [stops, polylinePoints, currentStopId, targetStopId])
+  }, [stops, polylinePoints, buses, currentStopId, targetStopId])
 
   if (stops.length < 2 && polylinePoints.length < 2) {
     return (

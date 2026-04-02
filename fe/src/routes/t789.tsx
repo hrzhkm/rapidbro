@@ -341,6 +341,13 @@ function T789Page() {
               <BusRouteMap
                 stops={routeStops.stops}
                 polylinePoints={routePolylinePoints}
+                buses={activeBuses.map((bus) => ({
+                  id: `${bus.route}-${bus.bus_no}`,
+                  label: `Bus ${bus.bus_no}`,
+                  lat: bus.latitude,
+                  lon: bus.longitude,
+                  isSelected: selectedBusNo === bus.bus_no,
+                }))}
                 currentStopId={selectedCurrentStopId}
                 targetStopId={targetStopId}
               />
@@ -392,6 +399,13 @@ function T789Page() {
                 <BusRouteMap
                   stops={routeStops.stops}
                   polylinePoints={routePolylinePoints}
+                  buses={activeBuses.map((bus) => ({
+                    id: `${bus.route}-${bus.bus_no}`,
+                    label: `Bus ${bus.bus_no}`,
+                    lat: bus.latitude,
+                    lon: bus.longitude,
+                    isSelected: selectedBusNo === bus.bus_no,
+                  }))}
                   currentStopId={selectedCurrentStopId}
                   targetStopId={targetStopId}
                 />
