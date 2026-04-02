@@ -33,17 +33,6 @@ export default function Header() {
           >
             RapidBro
           </Link>
-          <Link
-            to="/t789"
-            className={cn(
-              'text-sm transition-colors',
-              isMapPage
-                ? 'text-slate-600 hover:text-amber-900'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            T789 ETA
-          </Link>
         </div>
         <p
           className={cn(
