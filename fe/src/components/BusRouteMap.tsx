@@ -40,6 +40,24 @@ type PolylineCompatibleStop = {
   stop_lon: number
 }
 
+function getFitBoundsOptions(fullScreen: boolean) {
+  const basePadding: [number, number] = [24, 24]
+  if (typeof window === 'undefined') {
+    return { padding: basePadding }
+  }
+
+  const isDesktopViewport = window.matchMedia('(min-width: 768px)').matches
+  if (fullScreen && isDesktopViewport) {
+    // Keep route geometry centered in the visible map area when the side panel overlays the map.
+    return {
+      paddingTopLeft: basePadding,
+      paddingBottomRight: [460, 24] as [number, number],
+    }
+  }
+
+  return { padding: basePadding }
+}
+
 export function resolvePolylinePointsForRendering(
   stops: PolylineCompatibleStop[],
   polylinePoints: Array<[number, number]>,
@@ -241,7 +259,10 @@ function BusRouteMap({
             ]
           : lineLatLngs
       if (!hasFitBoundsRef.current) {
-        map.fitBounds(boundsLatLngs, { padding: [24, 24], animate: false })
+        map.fitBounds(boundsLatLngs, {
+          ...getFitBoundsOptions(fullScreen),
+          animate: false,
+        })
         hasFitBoundsRef.current = true
       }
 
