@@ -86,6 +86,7 @@ function App() {
   const hasAutoRequestedNearestStopRef = useRef(false)
   const nearestStopEtaRef = useRef<BusEta[]>([])
   const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
+  const etaGraceStopIdRef = useRef<string | null>(null)
   const [coords, setCoords] = useState<UserCoords | null>(null)
   const [nearestStop, setNearestStop] = useState<NearestStopResponse | null>(
     null,
@@ -197,6 +198,11 @@ function App() {
     setEtaErrorMessage(null)
     setSelectedRouteErrorMessage(null)
     setIsLoadingEta(true)
+    const isSameStopAsGraceState = etaGraceStopIdRef.current === stopId
+    const previousEtaForStop = isSameStopAsGraceState ? nearestStopEtaRef.current : []
+    const lastNonEmptyEtaAtMsForStop = isSameStopAsGraceState
+      ? lastNonEmptyEtaAtMsRef.current
+      : null
 
     try {
       const response = await fetch(
@@ -210,11 +216,11 @@ function App() {
         setEtaErrorMessage(body?.error ?? fallbackMessage)
         const merged = mergeBusesWithGraceHold({
           incoming: [],
-          previous: nearestStopEtaRef.current,
+          previous: previousEtaForStop,
           fetchSucceeded: false,
           nowMs: Date.now(),
           graceWindowMs: BUS_GRACE_WINDOW_MS,
-          lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+          lastNonEmptyAtMs: lastNonEmptyEtaAtMsForStop,
         })
         setNearestStopEta(merged.buses)
         setIsEtaGraceHeld(merged.isGraceHeld)
@@ -222,17 +228,18 @@ function App() {
           merged.lastNonEmptyAtMs === null ? null : new Date(merged.lastNonEmptyAtMs),
         )
         lastNonEmptyEtaAtMsRef.current = merged.lastNonEmptyAtMs
+        etaGraceStopIdRef.current = stopId
         return
       }
 
       const data = (await response.json()) as BusEta[]
       const merged = mergeBusesWithGraceHold({
         incoming: data,
-        previous: nearestStopEtaRef.current,
+        previous: previousEtaForStop,
         fetchSucceeded: true,
         nowMs: Date.now(),
         graceWindowMs: BUS_GRACE_WINDOW_MS,
-        lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+        lastNonEmptyAtMs: lastNonEmptyEtaAtMsForStop,
       })
       setNearestStopEta(merged.buses)
       setIsEtaGraceHeld(merged.isGraceHeld)
@@ -240,6 +247,7 @@ function App() {
         merged.lastNonEmptyAtMs === null ? null : new Date(merged.lastNonEmptyAtMs),
       )
       lastNonEmptyEtaAtMsRef.current = merged.lastNonEmptyAtMs
+      etaGraceStopIdRef.current = stopId
     } catch (error) {
       setEtaErrorMessage(
         error instanceof Error
@@ -248,11 +256,11 @@ function App() {
       )
       const merged = mergeBusesWithGraceHold({
         incoming: [],
-        previous: nearestStopEtaRef.current,
+        previous: previousEtaForStop,
         fetchSucceeded: false,
         nowMs: Date.now(),
         graceWindowMs: BUS_GRACE_WINDOW_MS,
-        lastNonEmptyAtMs: lastNonEmptyEtaAtMsRef.current,
+        lastNonEmptyAtMs: lastNonEmptyEtaAtMsForStop,
       })
       setNearestStopEta(merged.buses)
       setIsEtaGraceHeld(merged.isGraceHeld)
@@ -260,6 +268,7 @@ function App() {
         merged.lastNonEmptyAtMs === null ? null : new Date(merged.lastNonEmptyAtMs),
       )
       lastNonEmptyEtaAtMsRef.current = merged.lastNonEmptyAtMs
+      etaGraceStopIdRef.current = stopId
     } finally {
       setIsLoadingEta(false)
     }
