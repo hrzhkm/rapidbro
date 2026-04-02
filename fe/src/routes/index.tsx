@@ -71,8 +71,8 @@ type UserCoords = {
 }
 
 const panelSectionClass =
-  'rounded-2xl border border-white/18 bg-slate-950/38 p-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
-const panelSubtleTextClass = 'text-xs text-slate-300'
+  'rounded-2xl border border-amber-200/80 bg-white/78 p-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]'
+const panelSubtleTextClass = 'text-xs text-slate-600'
 
 function App() {
   const apiBaseUrl = useMemo(
@@ -453,18 +453,18 @@ function App() {
         targetStopId={nearestStop?.stop_id ?? null}
       />
     ) : (
-      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_12%,rgba(252,211,77,0.38),transparent_40%),radial-gradient(circle_at_80%_85%,rgba(34,211,238,0.2),transparent_34%),linear-gradient(120deg,#0f172a_0%,#1e293b_45%,#334155_100%)] px-6 text-center text-slate-100">
+      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_12%,rgba(252,211,77,0.45),transparent_44%),radial-gradient(circle_at_80%_85%,rgba(34,211,238,0.24),transparent_36%),linear-gradient(120deg,#fff7ed_0%,#fffbeb_52%,#fef3c7_100%)] px-6 text-center text-slate-800">
         <div>
-          <p className="font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-100">
+          <p className="font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-900">
             Live Route Map
           </p>
-          <p className="mt-2 text-sm text-slate-200">
+          <p className="mt-2 text-sm text-slate-700">
             {isLoadingRoutes || isLoadingSelectedMapRouteShape
               ? 'Loading the best route view for your nearest stop...'
               : 'Pick a route from the panel to render its live map.'}
           </p>
           {selectedRouteErrorMessage ? (
-            <p className="mt-2 text-xs text-rose-200">{selectedRouteErrorMessage}</p>
+            <p className="mt-2 text-xs text-rose-700">{selectedRouteErrorMessage}</p>
           ) : null}
         </div>
       </div>
@@ -476,7 +476,7 @@ function App() {
       panelTitle="Nearest Bus Stop"
       panelDescription="Track buses around your current stop with live route context."
       panelStatus={
-        <p className="text-slate-300">
+        <p className="text-slate-600">
           {lastFetchedAt
             ? `Updated ${lastFetchedAt.toLocaleTimeString()}`
             : 'Waiting for location update'}
@@ -512,16 +512,16 @@ function App() {
     >
       {errorMessage ? (
         <section className={panelSectionClass}>
-          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-200">
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-700">
             <AlertTriangle className="h-4 w-4" />
             Location Error
           </p>
-          <p className="mt-1 text-xs text-slate-300">{errorMessage}</p>
+          <p className="mt-1 text-xs text-slate-600">{errorMessage}</p>
         </section>
       ) : null}
 
       <section className={panelSectionClass}>
-        <p className="inline-flex items-center gap-2 text-sm font-medium text-amber-100">
+        <p className="inline-flex items-center gap-2 text-sm font-medium text-amber-900">
           <MapPin className="h-4 w-4" />
           Nearest Stop
         </p>
@@ -530,31 +530,31 @@ function App() {
           <>
             <p className="mt-2 text-base font-semibold">{nearestStop.stop_name}</p>
             <p className={panelSubtleTextClass}>Stop ID: {nearestStop.stop_id}</p>
-            <p className="mt-1 text-xs text-slate-200">
+            <p className="mt-1 text-xs text-slate-700">
               {nearestStop.stop_desc || 'No stop description'}
             </p>
-            <p className="mt-2 text-xs text-slate-200">
+            <p className="mt-2 text-xs text-slate-700">
               {nearestStop.distance_meters.toFixed(1)} m · {nearestStop.distance_km.toFixed(3)} km
             </p>
           </>
         ) : (
-          <p className="mt-2 text-xs text-slate-300">Waiting for nearest stop data.</p>
+          <p className="mt-2 text-xs text-slate-600">Waiting for nearest stop data.</p>
         )}
       </section>
 
       <section className={panelSectionClass}>
-        <p className="text-sm font-medium text-amber-100">Routes At This Stop</p>
+        <p className="text-sm font-medium text-amber-900">Routes At This Stop</p>
         {isLoadingRoutes ? (
-          <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-300">
+          <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             Loading routes...
           </p>
         ) : null}
         {routeErrorMessage ? (
-          <p className="mt-2 text-xs text-rose-200">{routeErrorMessage}</p>
+          <p className="mt-2 text-xs text-rose-700">{routeErrorMessage}</p>
         ) : null}
         {!isLoadingRoutes && !routeErrorMessage && stopRoutes.length === 0 ? (
-          <p className="mt-2 text-xs text-slate-300">No registered routes for this stop.</p>
+          <p className="mt-2 text-xs text-slate-600">No registered routes for this stop.</p>
         ) : null}
         {!isLoadingRoutes && stopRoutes.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
@@ -565,12 +565,12 @@ function App() {
                 onClick={() => handleSelectMapRoute(route.route_id)}
                 className={`rounded-xl border px-3 py-2 text-left text-xs transition-colors ${
                   selectedMapRouteId === route.route_id
-                    ? 'border-amber-300 bg-amber-200/20 text-amber-100'
-                    : 'border-white/15 bg-slate-950/25 text-slate-200 hover:bg-slate-900/65'
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-900'
+                    : 'border-amber-200/80 bg-white/70 text-slate-700 hover:bg-amber-100/80'
                 }`}
               >
                 <p className="font-medium">{route.route_short_name || route.route_id}</p>
-                <p className="text-[11px] text-slate-300">{route.route_long_name}</p>
+                <p className="text-[11px] text-slate-600">{route.route_long_name}</p>
               </button>
             ))}
           </div>
@@ -578,18 +578,18 @@ function App() {
       </section>
 
       <section className={panelSectionClass}>
-        <p className="text-sm font-medium text-amber-100">
+        <p className="text-sm font-medium text-amber-900">
           Active Buses To This Stop ({nearestStopEta.length})
         </p>
         {isLoadingEta ? (
-          <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-300">
+          <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             Loading ETA...
           </p>
         ) : null}
-        {etaErrorMessage ? <p className="mt-2 text-xs text-rose-200">{etaErrorMessage}</p> : null}
+        {etaErrorMessage ? <p className="mt-2 text-xs text-rose-700">{etaErrorMessage}</p> : null}
         {!isLoadingEta && !etaErrorMessage && nearestStopEta.length === 0 ? (
-          <p className="mt-2 text-xs text-slate-300">No active buses right now.</p>
+          <p className="mt-2 text-xs text-slate-600">No active buses right now.</p>
         ) : null}
         {!isLoadingEta && nearestStopEta.length > 0 ? (
           <div className="mt-2 space-y-2">
@@ -600,18 +600,18 @@ function App() {
                 onClick={() => handleSelectBus(eta)}
                 className={`block w-full rounded-xl border p-2 text-left text-xs transition-colors ${
                   selectedBusKey === getBusKey(eta)
-                    ? 'border-amber-300 bg-amber-200/20 text-amber-100'
-                    : 'border-white/15 bg-slate-950/25 text-slate-100 hover:bg-slate-900/65'
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-900'
+                    : 'border-amber-200/80 bg-white/70 text-slate-800 hover:bg-amber-100/80'
                 }`}
               >
                 <p className="font-medium">Bus {eta.bus_no}</p>
-                <p className="text-slate-200">
+                <p className="text-slate-700">
                   Route {eta.route_id} · ETA {eta.eta_minutes.toFixed(1)} min
                 </p>
-                <p className="text-slate-300">
+                <p className="text-slate-600">
                   {eta.stops_away} stops away · {eta.distance_km.toFixed(2)} km
                 </p>
-                <p className="text-slate-300">Current: {eta.current_stop_name}</p>
+                <p className="text-slate-600">Current: {eta.current_stop_name}</p>
               </button>
             ))}
           </div>
@@ -620,13 +620,13 @@ function App() {
 
       {selectedBus ? (
         <section className={panelSectionClass}>
-          <p className="text-sm font-medium text-amber-100">
+          <p className="text-sm font-medium text-amber-900">
             Selected Bus {selectedBus.bus_no} · Route {selectedBus.route_id}
           </p>
-          <p className="mt-1 text-xs text-slate-200">
+          <p className="mt-1 text-xs text-slate-700">
             ETA {selectedBus.eta_minutes.toFixed(1)} min · {selectedBus.stops_away} stops away
           </p>
-          <p className="text-xs text-slate-300">
+          <p className="text-xs text-slate-600">
             Current stop: {selectedBus.current_stop_name} ({selectedBus.current_stop_id})
             {selectedBus.stop_resolution_source === 'derived' ? ' · Estimated from GPS' : ''}
           </p>
@@ -634,14 +634,14 @@ function App() {
           {isLoadingSelectedRoute ||
           isLoadingSelectedRouteShape ||
           (selectedRouteStops && !selectedRouteShape) ? (
-            <p className="mt-3 inline-flex items-center gap-2 text-xs text-slate-300">
+            <p className="mt-3 inline-flex items-center gap-2 text-xs text-slate-600">
               <LoaderCircle className="h-4 w-4 animate-spin" />
               Loading route detail...
             </p>
           ) : null}
 
           {selectedRouteErrorMessage ? (
-            <p className="mt-3 text-xs text-rose-200">{selectedRouteErrorMessage}</p>
+            <p className="mt-3 text-xs text-rose-700">{selectedRouteErrorMessage}</p>
           ) : null}
 
           {selectedRouteStops && selectedRouteShape ? (

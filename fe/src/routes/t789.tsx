@@ -49,7 +49,7 @@ type RouteStopsResponse = {
 }
 
 const panelSectionClass =
-  'rounded-2xl border border-white/18 bg-slate-950/38 p-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+  'rounded-2xl border border-amber-200/80 bg-white/78 p-3 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]'
 
 function T789Page() {
   const targetStopId = '1000838'
@@ -91,7 +91,7 @@ function T789Page() {
     routeStops?.stops,
   )
   const interactiveCardClassName =
-    'block w-full cursor-pointer rounded-xl border border-white/15 bg-slate-950/25 p-2 text-left text-xs transition-colors outline-none focus-visible:border-amber-300 focus-visible:ring-2 focus-visible:ring-amber-200/60'
+    'block w-full cursor-pointer rounded-xl border border-amber-200/80 bg-white/70 p-2 text-left text-xs transition-colors outline-none focus-visible:border-amber-300 focus-visible:ring-2 focus-visible:ring-amber-200/60'
 
   const normalizeT789Buses = (payload: unknown): T789Bus[] => {
     if (Array.isArray(payload)) {
@@ -223,12 +223,12 @@ function T789Page() {
         targetStopId={targetStopId}
       />
     ) : (
-      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_12%,rgba(251,191,36,0.34),transparent_40%),radial-gradient(circle_at_84%_82%,rgba(34,211,238,0.2),transparent_36%),linear-gradient(115deg,#0f172a_0%,#1e293b_45%,#334155_100%)] px-6 text-center text-slate-100">
+      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_12%,rgba(251,191,36,0.42),transparent_44%),radial-gradient(circle_at_84%_82%,rgba(34,211,238,0.22),transparent_38%),linear-gradient(115deg,#fff7ed_0%,#fffbeb_52%,#fef3c7_100%)] px-6 text-center text-slate-800">
         <div>
-          <p className="font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-100">
+          <p className="font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-900">
             T789 Live Route
           </p>
-          <p className="mt-2 text-sm text-slate-200">
+          <p className="mt-2 text-sm text-slate-700">
             {isLoadingRouteShape
               ? 'Loading route shape...'
               : 'Waiting for route and bus data to render the map.'}
@@ -243,7 +243,7 @@ function T789Page() {
       panelTitle="T789 Control Panel"
       panelDescription="Monitor active T789 buses and ETA to KL Gateway."
       panelStatus={
-        <p className="text-slate-300">
+        <p className="text-slate-600">
           {lastUpdated
             ? `Updated ${lastUpdated.toLocaleTimeString()}`
             : 'No updates yet'}
@@ -272,30 +272,30 @@ function T789Page() {
     >
       {errorMessage ? (
         <section className={panelSectionClass}>
-          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-200">
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-700">
             <AlertTriangle className="h-4 w-4" />
             T789 Error
           </p>
-          <p className="mt-1 text-xs text-slate-300">{errorMessage}</p>
+          <p className="mt-1 text-xs text-slate-600">{errorMessage}</p>
         </section>
       ) : null}
 
       {etaErrorMessage ? (
         <section className={panelSectionClass}>
-          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-200">
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-700">
             <AlertTriangle className="h-4 w-4" />
             ETA Error
           </p>
-          <p className="mt-1 text-xs text-slate-300">{etaErrorMessage}</p>
+          <p className="mt-1 text-xs text-slate-600">{etaErrorMessage}</p>
         </section>
       ) : null}
 
       <section className={panelSectionClass}>
-        <p className="mb-2 text-sm font-medium text-amber-100">
+        <p className="mb-2 text-sm font-medium text-amber-900">
           All Active T789 Buses ({activeBuses.length})
         </p>
         {!isLoading && !errorMessage && activeBuses.length === 0 ? (
-          <p className="text-xs text-slate-300">No active T789 buses right now.</p>
+          <p className="text-xs text-slate-600">No active T789 buses right now.</p>
         ) : null}
 
         {activeBuses.length > 0 ? (
@@ -307,18 +307,18 @@ function T789Page() {
                 onClick={() => setSelectedBusNo(bus.bus_no)}
                 className={`${interactiveCardClassName} ${
                   selectedBusNo === bus.bus_no
-                    ? 'border-amber-300 bg-amber-200/20 text-amber-100'
-                    : 'hover:bg-slate-900/65 text-slate-100'
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-900'
+                    : 'hover:bg-amber-100/80 text-slate-800'
                 }`}
               >
                 <p className="font-medium">
                   Bus {bus.bus_no} · Route {bus.route}
                 </p>
-                <p className="text-slate-200">
+                <p className="text-slate-700">
                   {bus.latitude.toFixed(5)}, {bus.longitude.toFixed(5)} ·{' '}
                   {bus.speed.toFixed(1)} km/h
                 </p>
-                <p className="text-slate-300">
+                <p className="text-slate-600">
                   Current stop:{' '}
                   {bus.busstop_id
                     ? stopNameById[bus.busstop_id] || bus.busstop_id
@@ -331,11 +331,11 @@ function T789Page() {
       </section>
 
       <section className={panelSectionClass}>
-        <p className="mb-2 text-sm font-medium text-amber-100">
+        <p className="mb-2 text-sm font-medium text-amber-900">
           ETA To KL Gateway ({etas.length})
         </p>
         {!isLoading && !etaErrorMessage && etas.length === 0 ? (
-          <p className="text-xs text-slate-300">
+          <p className="text-xs text-slate-600">
             No ETA is available for KL Gateway right now.
           </p>
         ) : null}
@@ -349,18 +349,18 @@ function T789Page() {
                 onClick={() => setSelectedBusNo(eta.bus_no)}
                 className={`${interactiveCardClassName} ${
                   selectedBusNo === eta.bus_no
-                    ? 'border-amber-300 bg-amber-200/20 text-amber-100'
-                    : 'hover:bg-slate-900/65 text-slate-100'
+                    ? 'border-amber-300 bg-amber-200/20 text-amber-900'
+                    : 'hover:bg-amber-100/80 text-slate-800'
                 }`}
               >
                 <p className="font-medium">
                   Bus {eta.bus_no} · Route {eta.route_id || 'T7890'}
                 </p>
-                <p className="text-slate-200">
+                <p className="text-slate-700">
                   ETA {eta.eta_minutes.toFixed(1)} min · {eta.stops_away} stops away ·{' '}
                   {eta.distance_km.toFixed(2)} km
                 </p>
-                <p className="text-slate-300">
+                <p className="text-slate-600">
                   Current stop:{' '}
                   {stopNameById[eta.current_stop_id] || eta.current_stop_id}
                 </p>
@@ -372,27 +372,27 @@ function T789Page() {
 
       {selectedActiveBus ? (
         <section className={panelSectionClass}>
-          <p className="text-sm font-medium text-amber-100">
+          <p className="text-sm font-medium text-amber-900">
             Selected Bus {selectedActiveBus.bus_no} · Route {selectedActiveBus.route}
           </p>
 
           {selectedEta ? (
-            <div className="mt-2 rounded-xl border border-white/15 bg-slate-950/30 p-2 text-xs text-slate-100">
+            <div className="mt-2 rounded-xl border border-amber-200/80 bg-white/72 p-2 text-xs text-slate-800">
               <p className="font-medium">
                 ETA to {targetStopName}: {selectedEta.eta_minutes.toFixed(1)} min
               </p>
-              <p className="text-slate-300">
+              <p className="text-slate-600">
                 {selectedEta.stops_away} stops away · {selectedEta.distance_km.toFixed(2)} km
               </p>
             </div>
           ) : (
-            <p className="mt-2 text-xs text-slate-300">
+            <p className="mt-2 text-xs text-slate-600">
               No ETA to {targetStopName} for this bus right now.
             </p>
           )}
 
           {isLoadingRouteShape ? (
-            <p className="mt-3 text-xs text-slate-300">Loading route detail...</p>
+            <p className="mt-3 text-xs text-slate-600">Loading route detail...</p>
           ) : routeStops && routeShape ? (
             <div className="mt-3">
               <BusRouteLine
@@ -406,7 +406,7 @@ function T789Page() {
               />
             </div>
           ) : (
-            <p className="mt-3 text-xs text-slate-300">
+            <p className="mt-3 text-xs text-slate-600">
               Route line is unavailable right now.
             </p>
           )}

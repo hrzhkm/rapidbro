@@ -13,7 +13,7 @@ export default function Header() {
       className={cn(
         'fixed inset-x-0 top-0 z-40 border-b',
         isMapPage
-          ? 'border-white/20 bg-slate-950/45 text-white backdrop-blur-md'
+          ? 'border-amber-200/80 bg-amber-50/88 text-slate-800 backdrop-blur-md'
           : 'border-border bg-background text-foreground',
       )}
     >
@@ -28,7 +28,7 @@ export default function Header() {
             to="/"
             className={cn(
               "font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-sm font-semibold tracking-tight",
-              isMapPage ? 'text-amber-100' : 'text-foreground',
+              isMapPage ? 'text-amber-900' : 'text-foreground',
             )}
           >
             RapidBro
@@ -38,7 +38,7 @@ export default function Header() {
             className={cn(
               'text-sm transition-colors',
               isMapPage
-                ? 'text-slate-200 hover:text-amber-100'
+                ? 'text-slate-600 hover:text-amber-900'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -48,7 +48,7 @@ export default function Header() {
         <p
           className={cn(
             'text-xs',
-            isMapPage ? 'text-slate-200' : 'text-muted-foreground',
+            isMapPage ? 'text-slate-600' : 'text-muted-foreground',
           )}
         >
           Nearest bus stop lookup
