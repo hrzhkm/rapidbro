@@ -40,7 +40,7 @@ export default function Header() {
             isMapPage ? 'text-slate-600' : 'text-muted-foreground',
           )}
         >
-          Nearest bus stop lookup
+          {/* Nearest bus stop lookup */}
         </p>
       </div>
     </header>

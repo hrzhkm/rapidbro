@@ -40,6 +40,14 @@ type PolylineCompatibleStop = {
   stop_lon: number
 }
 
+type RoutePoint = [number, number]
+
+type RouteDirectionArrow = {
+  lat: number
+  lon: number
+  bearing: number
+}
+
 function getFitBoundsOptions(fullScreen: boolean) {
   const basePadding: [number, number] = [24, 24]
   if (typeof window === 'undefined') {
@@ -67,6 +75,115 @@ export function resolvePolylinePointsForRendering(
   }
 
   return stops.map((stop) => [stop.stop_lat, stop.stop_lon] as [number, number])
+}
+
+function getDistanceMeters(a: RoutePoint, b: RoutePoint): number {
+  const [lat1, lon1] = a
+  const [lat2, lon2] = b
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180
+  const earthRadiusMeters = 6_371_000
+  const deltaLat = toRadians(lat2 - lat1)
+  const deltaLon = toRadians(lon2 - lon1)
+  const startLat = toRadians(lat1)
+  const endLat = toRadians(lat2)
+
+  const haversine =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(startLat) *
+      Math.cos(endLat) *
+      Math.sin(deltaLon / 2) *
+      Math.sin(deltaLon / 2)
+  const centralAngle = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+
+  return earthRadiusMeters * centralAngle
+}
+
+function getBearingDegrees(a: RoutePoint, b: RoutePoint): number {
+  const [lat1, lon1] = a
+  const [lat2, lon2] = b
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180
+  const toDegrees = (radians: number) => (radians * 180) / Math.PI
+
+  const phi1 = toRadians(lat1)
+  const phi2 = toRadians(lat2)
+  const lambdaDelta = toRadians(lon2 - lon1)
+  const y = Math.sin(lambdaDelta) * Math.cos(phi2)
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambdaDelta)
+  const theta = toDegrees(Math.atan2(y, x))
+
+  return (theta + 360) % 360
+}
+
+export function buildRouteDirectionArrows(
+  polylinePoints: RoutePoint[],
+  spacingMeters = 380,
+  maxArrows = 24,
+): RouteDirectionArrow[] {
+  if (polylinePoints.length < 2 || spacingMeters <= 0 || maxArrows <= 0) {
+    return []
+  }
+
+  const segments = polylinePoints
+    .slice(1)
+    .map((to, index) => {
+      const from = polylinePoints[index]
+      const lengthMeters = getDistanceMeters(from, to)
+      return {
+        from,
+        to,
+        lengthMeters,
+        bearing: getBearingDegrees(from, to),
+      }
+    })
+    .filter((segment) => segment.lengthMeters > 0)
+
+  if (segments.length === 0) {
+    return []
+  }
+
+  const totalLengthMeters = segments.reduce(
+    (sum, segment) => sum + segment.lengthMeters,
+    0,
+  )
+  if (totalLengthMeters <= 0) {
+    return []
+  }
+
+  const requestedArrowCount = Math.floor(totalLengthMeters / spacingMeters)
+  const arrowCount = Math.min(Math.max(requestedArrowCount, 1), maxArrows)
+  const intervalMeters = totalLengthMeters / (arrowCount + 1)
+  const arrows: RouteDirectionArrow[] = []
+
+  for (let index = 1; index <= arrowCount; index += 1) {
+    const targetDistance = intervalMeters * index
+    let traversedMeters = 0
+
+    for (const segment of segments) {
+      if (traversedMeters + segment.lengthMeters < targetDistance) {
+        traversedMeters += segment.lengthMeters
+        continue
+      }
+
+      const distanceInSegment = targetDistance - traversedMeters
+      const ratio = Math.min(
+        Math.max(distanceInSegment / segment.lengthMeters, 0),
+        1,
+      )
+      const lat = segment.from[0] + (segment.to[0] - segment.from[0]) * ratio
+      const lon = segment.from[1] + (segment.to[1] - segment.from[1]) * ratio
+
+      arrows.push({
+        lat,
+        lon,
+        bearing: segment.bearing,
+      })
+      break
+    }
+  }
+
+  return arrows
 }
 
 async function loadLeaflet() {
@@ -218,6 +335,22 @@ function BusRouteMap({
           lineJoin: 'round',
         })
         .addTo(layerGroup)
+
+      const directionArrows = buildRouteDirectionArrows(resolvedPolylinePoints)
+      directionArrows.forEach((arrow) => {
+        leaflet
+          .marker([arrow.lat, arrow.lon], {
+            icon: leaflet.divIcon({
+              className: 'route-direction-arrow-icon',
+              html: `<div class="route-direction-arrow" style="--route-arrow-rotation:${arrow.bearing}deg"></div>`,
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            }),
+            keyboard: false,
+            interactive: false,
+          })
+          .addTo(layerGroup)
+      })
 
       stops.forEach((stop) => {
         const isCurrent = stop.stop_id === currentStopId
