@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildRouteDirectionArrows,
+  collectBoundsPointsForRendering,
   getRouteArrowRenderConfig,
   resolvePolylinePointsForRendering,
 } from '@/components/BusRouteMap'
@@ -111,5 +112,48 @@ describe('getRouteArrowRenderConfig', () => {
       spacingMeters: 1100,
       maxArrows: 4,
     })
+  })
+})
+
+describe('collectBoundsPointsForRendering', () => {
+  const baseLayer = {
+    stops: [
+      { stop_id: '1001', stop_name: 'Stop A', stop_lat: 3.11, stop_lon: 101.66 },
+      { stop_id: '1002', stop_name: 'Stop B', stop_lat: 3.12, stop_lon: 101.67 },
+    ],
+    polylinePoints: [
+      [3.11, 101.66] as [number, number],
+      [3.12, 101.67] as [number, number],
+    ],
+  }
+
+  it('includes tracked stop even when route stop markers are hidden', () => {
+    expect(
+      collectBoundsPointsForRendering({
+        routeLayers: [baseLayer],
+        showStopMarkers: false,
+        buses: [{ lat: 3.13, lon: 101.68 }],
+        trackedStop: {
+          stop_id: 'tracked',
+          stop_name: 'Tracked Stop',
+          stop_lat: 3.14,
+          stop_lon: 101.69,
+        },
+      }),
+    ).toContainEqual([3.14, 101.69])
+  })
+
+  it('does not include regular stop points when stop markers are hidden', () => {
+    expect(
+      collectBoundsPointsForRendering({
+        routeLayers: [baseLayer],
+        showStopMarkers: false,
+        buses: [],
+        trackedStop: null,
+      }),
+    ).toEqual([
+      [3.11, 101.66],
+      [3.12, 101.67],
+    ])
   })
 })
