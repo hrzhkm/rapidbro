@@ -57,8 +57,14 @@ export function getVisibleRouteIds(
 
 export function shouldShowRouteStopMarkers(
   selectedRouteId: string | null,
+  visibleRouteCount = 0,
 ): boolean {
-  return selectedRouteId !== null
+  if (selectedRouteId !== null) {
+    return true
+  }
+
+  // In all-routes mode, still show stop markers when only one route is visible.
+  return visibleRouteCount === 1
 }
 
 export function buildVisibleRouteLayers({

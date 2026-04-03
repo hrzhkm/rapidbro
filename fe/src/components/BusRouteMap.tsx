@@ -26,6 +26,7 @@ type BusRouteMapProps = {
     lon: number
     isSelected?: boolean
   }>
+  trackedStop?: RouteMapStop | null
   currentStopId?: string | null
   targetStopId?: string | null
   fullScreen?: boolean
@@ -53,6 +54,11 @@ type RouteDirectionArrow = {
   lat: number
   lon: number
   bearing: number
+}
+
+type RenderableRouteLayer = {
+  stops: RouteMapStop[]
+  polylinePoints: Array<[number, number]>
 }
 
 function getFitBoundsOptions(fullScreen: boolean) {
@@ -211,6 +217,31 @@ export function getRouteArrowRenderConfig(routeCount: number): {
   }
 }
 
+export function collectBoundsPointsForRendering({
+  routeLayers,
+  showStopMarkers,
+  buses,
+  trackedStop,
+}: {
+  routeLayers: RenderableRouteLayer[]
+  showStopMarkers: boolean
+  buses: Array<{ lat: number; lon: number }>
+  trackedStop: RouteMapStop | null
+}): RoutePoint[] {
+  const routePoints = routeLayers.flatMap((routeLayer) => routeLayer.polylinePoints)
+  const stopPoints = showStopMarkers
+    ? routeLayers.flatMap((routeLayer) =>
+        routeLayer.stops.map((stop) => [stop.stop_lat, stop.stop_lon] as RoutePoint),
+      )
+    : []
+  const busPoints = buses.map((bus) => [bus.lat, bus.lon] as RoutePoint)
+  const trackedStopPoints = trackedStop
+    ? [[trackedStop.stop_lat, trackedStop.stop_lon] as RoutePoint]
+    : []
+
+  return [...routePoints, ...stopPoints, ...busPoints, ...trackedStopPoints]
+}
+
 async function loadLeaflet() {
   return import('leaflet')
 }
@@ -229,6 +260,7 @@ function BusRouteMap({
   polylinePoints = [],
   routeLayers = [],
   buses = [],
+  trackedStop = null,
   currentStopId = null,
   targetStopId = null,
   fullScreen = false,
@@ -443,6 +475,19 @@ function BusRouteMap({
         })
       }
 
+      if (trackedStop) {
+        leaflet
+          .circleMarker([trackedStop.stop_lat, trackedStop.stop_lon], {
+            radius: 9,
+            color: '#7c2d12',
+            weight: 3,
+            fillColor: '#f97316',
+            fillOpacity: 0.96,
+          })
+          .bindTooltip(`${trackedStop.stop_name} (tracked stop)`)
+          .addTo(layerGroup)
+      }
+
       buses.forEach((bus) => {
         const markerScale = getBusMarkerScale(map.getZoom())
         leaflet
@@ -458,14 +503,12 @@ function BusRouteMap({
           .addTo(layerGroup)
       })
 
-      const allLineLatLngs = lineLatLngsByRoute.flat()
-      const stopLatLngs = showStopMarkers
-        ? resolvedRouteLayers.flatMap((routeLayer) =>
-            routeLayer.stops.map((stop) => leaflet.latLng(stop.stop_lat, stop.stop_lon)),
-          )
-        : []
-      const busLatLngs = buses.map((bus) => leaflet.latLng(bus.lat, bus.lon))
-      const boundsLatLngs = [...allLineLatLngs, ...stopLatLngs, ...busLatLngs]
+      const boundsLatLngs = collectBoundsPointsForRendering({
+        routeLayers: resolvedRouteLayers,
+        showStopMarkers,
+        buses,
+        trackedStop,
+      }).map(([lat, lon]) => leaflet.latLng(lat, lon))
       if (!hasFitBoundsRef.current) {
         map.fitBounds(boundsLatLngs, {
           ...getFitBoundsOptions(fullScreen),
@@ -493,6 +536,7 @@ function BusRouteMap({
     targetStopId,
     fullScreen,
     showStopMarkers,
+    trackedStop,
     mapReadyTick,
   ])
 

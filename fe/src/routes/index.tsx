@@ -606,7 +606,20 @@ function App() {
         showLegend={false}
         routeLayers={visibleRouteLayers}
         stops={[]}
-        showStopMarkers={shouldShowRouteStopMarkers(selectedMapRouteId)}
+        trackedStop={
+          nearestStop
+            ? {
+                stop_id: nearestStop.stop_id,
+                stop_name: nearestStop.stop_name,
+                stop_lat: nearestStop.stop_lat,
+                stop_lon: nearestStop.stop_lon,
+              }
+            : null
+        }
+        showStopMarkers={shouldShowRouteStopMarkers(
+          selectedMapRouteId,
+          visibleRouteLayers.length,
+        )}
         buses={visibleMapBuses.map((eta) => ({
           id: getBusKey(eta),
           label: `Bus ${eta.bus_no}`,
