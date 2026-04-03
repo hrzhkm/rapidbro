@@ -40,9 +40,11 @@ describe('getVisibleRouteIds', () => {
 })
 
 describe('shouldShowRouteStopMarkers', () => {
-  it('hides stop markers in all-routes mode and shows for single route', () => {
-    expect(shouldShowRouteStopMarkers(null)).toBe(false)
-    expect(shouldShowRouteStopMarkers('T7890')).toBe(true)
+  it('shows stop markers for selected route and single-route all-routes mode', () => {
+    expect(shouldShowRouteStopMarkers(null, 0)).toBe(false)
+    expect(shouldShowRouteStopMarkers(null, 2)).toBe(false)
+    expect(shouldShowRouteStopMarkers(null, 1)).toBe(true)
+    expect(shouldShowRouteStopMarkers('T7890', 2)).toBe(true)
   })
 })
 
