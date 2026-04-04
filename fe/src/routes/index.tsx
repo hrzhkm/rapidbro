@@ -673,9 +673,60 @@ function App() {
       </div>
     )
 
+  const locationOverlay =
+    locationPermission !== 'granted' && !coords ? (
+      <div className="w-full max-w-sm rounded-2xl border border-amber-300/80 bg-white/90 p-5 shadow-2xl backdrop-blur-md">
+        <div className="flex items-start gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+            <LocateFixed className="h-5 w-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            {locationPermission === 'denied' ? (
+              <>
+                <p className="text-sm font-semibold text-rose-800">Location access blocked</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Enable location access for this site in your browser settings, then refresh the page.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-amber-900">Allow location access</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  RapidBro needs your location to find nearby bus stops and show real-time bus arrivals.
+                </p>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    hasAutoRequestedNearestStopRef.current = true
+                    void handleFindNearestStop()
+                  }}
+                  disabled={isLoading}
+                  size="sm"
+                  className="mt-4 w-full bg-amber-500 text-slate-900 hover:bg-amber-400"
+                >
+                  {isLoading ? (
+                    <>
+                      <LoaderCircle className="animate-spin" />
+                      Getting location...
+                    </>
+                  ) : (
+                    <>
+                      <LocateFixed />
+                      Share my location
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    ) : null
+
   return (
     <MapPanelShell
       map={mapContent}
+      mapOverlay={locationOverlay}
       panelTitle="Nearest Bus Stop"
       panelDescription="Track buses around your current stop with live route context."
       panelStatus={

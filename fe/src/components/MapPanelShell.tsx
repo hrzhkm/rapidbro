@@ -6,6 +6,7 @@ import { getMobilePanelTransformClass } from '@/lib/map-layout'
 
 type MapPanelShellProps = {
   map: React.ReactNode
+  mapOverlay?: React.ReactNode
   panelTitle: string
   panelDescription?: string
   panelStatus?: React.ReactNode
@@ -15,6 +16,7 @@ type MapPanelShellProps = {
 
 function MapPanelShell({
   map,
+  mapOverlay,
   panelTitle,
   panelDescription,
   panelStatus,
@@ -28,6 +30,12 @@ function MapPanelShell({
       <div className="absolute inset-0 z-0">{map}</div>
 
       <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_14%_18%,rgba(251,191,36,0.22),transparent_44%),radial-gradient(circle_at_86%_76%,rgba(34,211,238,0.18),transparent_40%),linear-gradient(to_bottom,rgba(255,251,235,0.12),rgba(255,251,235,0.02)_30%,rgba(251,191,36,0.12))]" />
+
+      {mapOverlay ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center p-6 md:pr-[28rem]">
+          {mapOverlay}
+        </div>
+      ) : null}
 
       <aside
         data-testid="map-side-panel"
