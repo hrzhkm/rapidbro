@@ -113,6 +113,7 @@ function App() {
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
   const [lastNonEmptyEtaAt, setLastNonEmptyEtaAt] = useState<Date | null>(null)
   const [isEtaGraceHeld, setIsEtaGraceHeld] = useState(false)
+  const [locationPermission, setLocationPermission] = useState<PermissionState | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [etaErrorMessage, setEtaErrorMessage] = useState<string | null>(null)
   const [routeErrorMessage, setRouteErrorMessage] = useState<string | null>(
@@ -582,12 +583,31 @@ function App() {
   }
 
   useEffect(() => {
-    if (hasAutoRequestedNearestStopRef.current) {
-      return
+    if (hasAutoRequestedNearestStopRef.current) return
+
+    const checkPermissionAndAutoRequest = async () => {
+      let state: PermissionState = 'prompt'
+
+      if ('permissions' in navigator) {
+        try {
+          const result = await navigator.permissions.query({ name: 'geolocation' })
+          state = result.state
+          setLocationPermission(result.state)
+          result.onchange = () => setLocationPermission(result.state)
+        } catch {
+          setLocationPermission('prompt')
+        }
+      } else {
+        setLocationPermission('prompt')
+      }
+
+      if (state === 'granted') {
+        hasAutoRequestedNearestStopRef.current = true
+        void handleFindNearestStop()
+      }
     }
 
-    hasAutoRequestedNearestStopRef.current = true
-    void handleFindNearestStop()
+    void checkPermissionAndAutoRequest()
   }, [])
 
   useEffect(() => {
@@ -704,6 +724,55 @@ function App() {
         </div>
       }
     >
+      {locationPermission !== 'granted' && !coords ? (
+        <section className="rounded-2xl border border-amber-300/80 bg-amber-50/90 p-4 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-200">
+              <LocateFixed className="h-4 w-4 text-amber-700" />
+            </div>
+            <div className="flex-1">
+              {locationPermission === 'denied' ? (
+                <>
+                  <p className="text-sm font-semibold text-rose-800">Location access blocked</p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    RapidBro needs your location to find nearby bus stops. Please enable location access for this site in your browser settings, then refresh the page.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-amber-900">Location access needed</p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    RapidBro uses your location to find nearby bus stops and show real-time arrivals. Your location is only used locally and never stored.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      hasAutoRequestedNearestStopRef.current = true
+                      void handleFindNearestStop()
+                    }}
+                    disabled={isLoading}
+                    size="sm"
+                    className="mt-3 bg-amber-500 text-slate-900 hover:bg-amber-400"
+                  >
+                    {isLoading ? (
+                      <>
+                        <LoaderCircle className="animate-spin" />
+                        Getting location...
+                      </>
+                    ) : (
+                      <>
+                        <LocateFixed />
+                        Allow location access
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {errorMessage ? (
         <section className={panelSectionClass}>
           <p className="inline-flex items-center gap-2 text-sm font-medium text-rose-700">
