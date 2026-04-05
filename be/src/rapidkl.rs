@@ -226,8 +226,26 @@ impl GtfsCache {
             }
         }
 
+        // Build set of routes that have at least one trip with valid geometry.
+        // Routes whose trips only reference shape IDs absent from shapes.txt are
+        // excluded from the stop index so the frontend never requests their shapes.
+        let routes_with_shapes: HashSet<String> = context
+            .trips_by_route
+            .iter()
+            .filter_map(|(route_id, trips)| {
+                if trips.iter().any(|t| shapes_by_id.contains_key(&t.shape_id)) {
+                    Some(route_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         let mut routes_by_stop: HashMap<String, Vec<StopRouteSummary>> = HashMap::new();
         for route_stops in route_stops_by_route.values() {
+            if !routes_with_shapes.contains(&route_stops.route_id) {
+                continue;
+            }
             let route_summary = StopRouteSummary {
                 route_id: route_stops.route_id.clone(),
                 route_short_name: route_stops.route_short_name.clone(),
@@ -440,6 +458,12 @@ pub fn get_shape_by_route(
     let mut shape_trip_counts_for_stop: HashMap<String, usize> = HashMap::new();
 
     for trip in trips {
+        // Only count shapes that actually exist in shapes.txt — some GTFS datasets
+        // reference shape IDs in trips.txt that have no corresponding geometry.
+        if !shapes_by_id.contains_key(&trip.shape_id) {
+            continue;
+        }
+
         *shape_trip_counts.entry(trip.shape_id.clone()).or_insert(0) += 1;
 
         if let Some(target_stop_id) = stop_id {
@@ -473,7 +497,7 @@ pub fn get_shape_by_route(
         .ok_or_else(|| {
             (
                 StatusCode::NOT_FOUND,
-                format!("No shape found for route '{}'", route_id),
+                format!("No shape geometry found for route '{}'", route_id),
             )
         })?;
 
