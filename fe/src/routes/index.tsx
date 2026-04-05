@@ -7,6 +7,7 @@ import { MapPanelShell } from '@/components/MapPanelShell'
 import { Button } from '@/components/ui/button'
 import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import { getGeolocationPosition } from '@/lib/geolocation'
+import { detectRegion, type ApiRegionPrefix } from '@/lib/region'
 import {
   buildRoutePrefetchWarning,
   buildVisibleRouteLayers,
@@ -78,17 +79,12 @@ const panelSectionClass =
 const panelSubtleTextClass = 'text-xs text-slate-600'
 const BUS_GRACE_WINDOW_MS = 5 * 60 * 1000
 
-// Perlis / northern Kedah bounding box — routes to /kangar/* endpoints.
-function isKangarRegion(lat: number, lon: number): boolean {
-  return lat >= 5.5 && lat <= 6.7 && lon >= 99.5 && lon <= 101.0
-}
-
 function App() {
   const apiBaseUrl = useMemo(
     () => import.meta.env.VITE_BE_URL ?? 'http://localhost:3030',
     [],
   )
-  const [apiRegionPrefix, setApiRegionPrefix] = useState<'' | '/kangar'>('')
+  const [apiRegionPrefix, setApiRegionPrefix] = useState<ApiRegionPrefix>('')
   const hasAutoRequestedNearestStopRef = useRef(false)
   const nearestStopEtaRef = useRef<BusEta[]>([])
   const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
@@ -286,7 +282,7 @@ function App() {
     options: {
       setSelectedErrorState?: boolean
       setSelectedLoadingState?: boolean
-      prefix?: '' | '/kangar'
+      prefix?: ApiRegionPrefix
     } = {},
   ) => {
     const {
@@ -343,7 +339,7 @@ function App() {
     stopId?: string | null,
     options: {
       setSelectedErrorState?: boolean
-      prefix?: '' | '/kangar'
+      prefix?: ApiRegionPrefix
     } = {},
   ) => {
     const { setSelectedErrorState = true, prefix = apiRegionPrefix } = options
@@ -570,7 +566,7 @@ function App() {
       const lon = position.coords.longitude
       setCoords({ lat, lon })
 
-      const prefix = isKangarRegion(lat, lon) ? '/kangar' : ''
+      const prefix = detectRegion(lat, lon)
       setApiRegionPrefix(prefix)
 
       const nearestStopData = await fetchNearestStop(lat, lon, prefix)
