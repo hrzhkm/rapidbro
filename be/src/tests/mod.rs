@@ -1,4 +1,5 @@
 mod rapidkl;
+mod bus_kangar;
 
 use super::*;
 use crate::rapidkl::{BusMotionState, BusPosition};
