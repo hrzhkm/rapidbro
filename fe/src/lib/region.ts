@@ -1,4 +1,4 @@
-export type ApiRegionPrefix = '' | '/kangar'
+export type ApiRegionPrefix = '' | '/kangar' | '/alor-setar'
 
 type RegionDefinition = {
   prefix: ApiRegionPrefix
@@ -13,10 +13,18 @@ const REGIONS: RegionDefinition[] = [
   {
     prefix: '/kangar',
     name: 'Kangar',
+    latMin: 6.35,
+    latMax: 6.75,
+    lonMin: 100.0,
+    lonMax: 100.55,
+  },
+  {
+    prefix: '/alor-setar',
+    name: 'Alor Setar',
     latMin: 5.5,
-    latMax: 6.7,
-    lonMin: 99.5,
-    lonMax: 101.0,
+    latMax: 6.35,
+    lonMin: 100.2,
+    lonMax: 100.65,
   },
 ]
 

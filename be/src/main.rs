@@ -1,6 +1,8 @@
 mod rapidkl;
 #[path = "busmy-kangar.rs"]
 mod busmy_kangar;
+#[path = "busmy-alor-setar.rs"]
+mod busmy_alor_setar;
 
 use axum::{
     extract::{Path, Query, State},
@@ -68,6 +70,8 @@ pub struct AppState {
     pub gtfs_cache: Arc<GtfsCache>,
     pub kangar_gtfs_cache: Arc<GtfsCache>,
     pub kangar_fetch_lock: Arc<Mutex<()>>,
+    pub alor_setar_gtfs_cache: Arc<GtfsCache>,
+    pub alor_setar_fetch_lock: Arc<Mutex<()>>,
     pub bus_ttl_ms: i64,
     pub stale_after_ms: i64,
     pub stationary_window_ms: i64,
@@ -191,6 +195,13 @@ async fn main() {
             .unwrap_or_else(|error| panic!("Failed to build Kangar GTFS cache: {}", error)),
     );
 
+    let alor_setar_data_dir =
+        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-alor-setar");
+    let alor_setar_gtfs_cache = Arc::new(
+        GtfsCache::build(&alor_setar_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Alor Setar GTFS cache: {}", error)),
+    );
+
     let app_state = AppState {
         redis_client: redis_client.clone(),
         ingestor_status: Arc::new(RwLock::new(IngestorStatus {
@@ -206,6 +217,8 @@ async fn main() {
         gtfs_cache,
         kangar_gtfs_cache,
         kangar_fetch_lock: Arc::new(Mutex::new(())),
+        alor_setar_gtfs_cache,
+        alor_setar_fetch_lock: Arc::new(Mutex::new(())),
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
         stationary_window_ms: stationary_window_seconds * 1_000,
@@ -252,6 +265,35 @@ async fn main() {
             get(busmy_kangar::kangar_get_route_shape),
         )
         .route("/kangar/stops/nearest", get(busmy_kangar::kangar_get_nearest_stop))
+        // ── Alor Setar routes ────────────────────────────────────────────
+        .route(
+            "/alor-setar/get-all",
+            get(busmy_alor_setar::alor_setar_fetch_all_buses),
+        )
+        .route(
+            "/alor-setar/route/{route_id}/eta/{stop_id}",
+            get(busmy_alor_setar::alor_setar_get_route_eta),
+        )
+        .route(
+            "/alor-setar/stops/{stop_id}/eta",
+            get(busmy_alor_setar::alor_setar_get_stop_eta),
+        )
+        .route(
+            "/alor-setar/stops/{stop_id}/routes",
+            get(busmy_alor_setar::alor_setar_get_stop_routes),
+        )
+        .route(
+            "/alor-setar/route/{route_id}/stops",
+            get(busmy_alor_setar::alor_setar_get_route_stops),
+        )
+        .route(
+            "/alor-setar/route/{route_id}/shape",
+            get(busmy_alor_setar::alor_setar_get_route_shape),
+        )
+        .route(
+            "/alor-setar/stops/nearest",
+            get(busmy_alor_setar::alor_setar_get_nearest_stop),
+        )
         .layer(cors)
         .with_state(app_state);
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   COARSE_GEOLOCATION_OPTIONS,
   getGeolocationPosition,
@@ -23,6 +23,12 @@ function mockPosition(): GeolocationPosition {
 }
 
 describe('getGeolocationPosition', () => {
+  beforeEach(() => {
+    // Ensure dev mock flags are off so tests exercise real geolocation logic
+    vi.stubEnv('VITE_MOCK_KANGAR', 'false')
+    vi.stubEnv('VITE_MOCK_ALOR_SETAR', 'false')
+  })
+
   it('uses coarse geolocation options first', async () => {
     const position = mockPosition()
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
