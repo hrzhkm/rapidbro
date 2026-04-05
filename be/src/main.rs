@@ -1,6 +1,6 @@
 mod rapidkl;
-#[path = "bus-kangar.rs"]
-mod bus_kangar;
+#[path = "busmy-kangar.rs"]
+mod busmy_kangar;
 
 use axum::{
     extract::{Path, Query, State},
@@ -206,7 +206,7 @@ async fn main() {
 
     let kangar_state = app_state.clone();
     tokio::spawn(async move {
-        bus_kangar::run_mybas_kangar_ingestor(kangar_state).await;
+        busmy_kangar::run_mybas_kangar_ingestor(kangar_state).await;
     });
 
     let app = Router::new()

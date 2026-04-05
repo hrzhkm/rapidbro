@@ -1,4 +1,4 @@
-use crate::bus_kangar::{
+use crate::busmy_kangar::{
     fetch_mybas_kangar_positions, MybasKangarPosition, REDIS_MYBAS_KANGAR_INGEST_LAST_KEY,
     REDIS_MYBAS_KANGAR_LAST_SEEN_KEY, REDIS_MYBAS_KANGAR_LATEST_KEY,
 };
@@ -119,7 +119,7 @@ async fn fetch_mybas_kangar_positions_returns_vehicle_data() {
     }
 
     println!(
-        "[bus_kangar integration] {} positions fetched, first: {:?}",
+        "[busmy_kangar integration] {} positions fetched, first: {:?}",
         positions.len(),
         positions.first()
     );
