@@ -286,11 +286,13 @@ function App() {
     options: {
       setSelectedErrorState?: boolean
       setSelectedLoadingState?: boolean
+      prefix?: '' | '/kangar'
     } = {},
   ) => {
     const {
       setSelectedErrorState = true,
       setSelectedLoadingState = true,
+      prefix = apiRegionPrefix,
     } = options
 
     if (routeStopsByRoute[routeId]) {
@@ -306,7 +308,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `${apiBaseUrl}${apiRegionPrefix}/route/${encodeURIComponent(routeId)}/stops`,
+        `${apiBaseUrl}${prefix}/route/${encodeURIComponent(routeId)}/stops`,
       )
       if (!response.ok) {
         const fallbackMessage = 'Unable to fetch route stops'
@@ -341,9 +343,10 @@ function App() {
     stopId?: string | null,
     options: {
       setSelectedErrorState?: boolean
+      prefix?: '' | '/kangar'
     } = {},
   ) => {
-    const { setSelectedErrorState = true } = options
+    const { setSelectedErrorState = true, prefix = apiRegionPrefix } = options
     const cacheKey = getRouteShapeCacheKey(routeId, stopId)
     if (routeShapesByKey[cacheKey]) {
       return routeShapesByKey[cacheKey]
@@ -360,7 +363,7 @@ function App() {
     try {
       const params = stopId ? `?stop_id=${encodeURIComponent(stopId)}` : ''
       const response = await fetch(
-        `${apiBaseUrl}${apiRegionPrefix}/route/${encodeURIComponent(routeId)}/shape${params}`,
+        `${apiBaseUrl}${prefix}/route/${encodeURIComponent(routeId)}/shape${params}`,
       )
       if (!response.ok) {
         const fallbackMessage = 'Unable to fetch route shape'
@@ -419,14 +422,12 @@ function App() {
               fetchRouteStops(route.route_id, {
                 setSelectedErrorState: false,
                 setSelectedLoadingState: false,
+                prefix,
               }),
-              fetchRouteShape(
-                route.route_id,
-                stopId,
-                {
-                  setSelectedErrorState: false,
-                },
-              ),
+              fetchRouteShape(route.route_id, stopId, {
+                setSelectedErrorState: false,
+                prefix,
+              }),
             ])
             return route.route_id
           }),
