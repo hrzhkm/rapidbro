@@ -14,9 +14,10 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
+use std::path::Path as StdPath;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 
 use rapidkl::{
@@ -28,9 +29,9 @@ use rapidkl::{
 // ── Generic structs ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
-struct NearestStopQuery {
-    lat: f64,
-    lon: f64,
+pub struct NearestStopQuery {
+    pub lat: f64,
+    pub lon: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,20 +40,20 @@ pub struct RouteShapeQuery {
 }
 
 #[derive(Debug, Serialize)]
-struct NearestStopResponse {
-    stop_id: String,
-    stop_name: String,
-    stop_desc: String,
-    stop_lat: f64,
-    stop_lon: f64,
-    distance_km: f64,
-    distance_meters: f64,
+pub struct NearestStopResponse {
+    pub stop_id: String,
+    pub stop_name: String,
+    pub stop_desc: String,
+    pub stop_lat: f64,
+    pub stop_lon: f64,
+    pub distance_km: f64,
+    pub distance_meters: f64,
 }
 
 #[derive(Debug, Serialize)]
-struct StopRoutesResponse {
-    stop_id: String,
-    routes: Vec<StopRouteSummary>,
+pub struct StopRoutesResponse {
+    pub stop_id: String,
+    pub routes: Vec<StopRouteSummary>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +66,8 @@ pub struct AppState {
     pub redis_client: redis::Client,
     pub ingestor_status: Arc<RwLock<IngestorStatus>>,
     pub gtfs_cache: Arc<GtfsCache>,
+    pub kangar_gtfs_cache: Arc<GtfsCache>,
+    pub kangar_fetch_lock: Arc<Mutex<()>>,
     pub bus_ttl_ms: i64,
     pub stale_after_ms: i64,
     pub stationary_window_ms: i64,
@@ -83,17 +86,17 @@ pub struct IngestorStatus {
 }
 
 #[derive(Debug, Serialize)]
-struct GetAllMeta {
-    source: &'static str,
-    last_ingest_at_unix_ms: Option<i64>,
-    is_stale: bool,
-    active_bus_count: usize,
+pub struct GetAllMeta {
+    pub source: &'static str,
+    pub last_ingest_at_unix_ms: Option<i64>,
+    pub is_stale: bool,
+    pub active_bus_count: usize,
 }
 
 #[derive(Debug, Serialize)]
-struct GetAllResponse {
-    data: Vec<BusPosition>,
-    meta: GetAllMeta,
+pub struct GetAllResponse {
+    pub data: Vec<BusPosition>,
+    pub meta: GetAllMeta,
 }
 
 #[derive(Debug, Serialize)]
@@ -176,9 +179,16 @@ async fn main() {
         .query_async(&mut redis_conn)
         .await
         .unwrap_or_else(|error| panic!("Failed to ping Redis '{}': {}", redis_url, error));
+    let rapidkl_data_dir = StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/rapid-kl");
     let gtfs_cache = Arc::new(
-        GtfsCache::build()
-            .unwrap_or_else(|error| panic!("Failed to build GTFS cache at startup: {}", error)),
+        GtfsCache::build(&rapidkl_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build RapidKL GTFS cache: {}", error)),
+    );
+
+    let kangar_data_dir = StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-kangar");
+    let kangar_gtfs_cache = Arc::new(
+        GtfsCache::build(&kangar_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Kangar GTFS cache: {}", error)),
     );
 
     let app_state = AppState {
@@ -194,6 +204,8 @@ async fn main() {
             last_error: None,
         })),
         gtfs_cache,
+        kangar_gtfs_cache,
+        kangar_fetch_lock: Arc::new(Mutex::new(())),
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
         stationary_window_ms: stationary_window_seconds * 1_000,
@@ -202,11 +214,6 @@ async fn main() {
     let ingestor_state = app_state.clone();
     tokio::spawn(async move {
         run_bus_ingestor(ingestor_state).await;
-    });
-
-    let kangar_state = app_state.clone();
-    tokio::spawn(async move {
-        busmy_kangar::run_mybas_kangar_ingestor(kangar_state).await;
     });
 
     let app = Router::new()
@@ -225,6 +232,26 @@ async fn main() {
         .route("/route/{route_id}/stops", get(get_route_stops))
         .route("/route/{route_id}/shape", get(get_route_shape))
         .route("/stops/nearest", get(get_nearest_stop))
+        // ── Kangar routes ────────────────────────────────────────────────
+        .route("/kangar/get-all", get(busmy_kangar::kangar_fetch_all_buses))
+        .route(
+            "/kangar/route/{route_id}/eta/{stop_id}",
+            get(busmy_kangar::kangar_get_route_eta),
+        )
+        .route("/kangar/stops/{stop_id}/eta", get(busmy_kangar::kangar_get_stop_eta))
+        .route(
+            "/kangar/stops/{stop_id}/routes",
+            get(busmy_kangar::kangar_get_stop_routes),
+        )
+        .route(
+            "/kangar/route/{route_id}/stops",
+            get(busmy_kangar::kangar_get_route_stops),
+        )
+        .route(
+            "/kangar/route/{route_id}/shape",
+            get(busmy_kangar::kangar_get_route_shape),
+        )
+        .route("/kangar/stops/nearest", get(busmy_kangar::kangar_get_nearest_stop))
         .layer(cors)
         .with_state(app_state);
 
@@ -406,6 +433,23 @@ async fn get_nearest_stop(
 pub async fn load_active_bus_snapshot(
     state: &AppState,
 ) -> Result<RedisBusSnapshot, (StatusCode, Json<ErrorResponse>)> {
+    load_active_bus_snapshot_with_keys(
+        state,
+        REDIS_BUSES_LATEST_KEY,
+        REDIS_BUSES_LAST_SEEN_KEY,
+        REDIS_BUSES_MOTION_KEY,
+        REDIS_INGEST_LAST_KEY,
+    )
+    .await
+}
+
+pub async fn load_active_bus_snapshot_with_keys(
+    state: &AppState,
+    latest_key: &str,
+    last_seen_key: &str,
+    motion_key: &str,
+    ingest_key: &str,
+) -> Result<RedisBusSnapshot, (StatusCode, Json<ErrorResponse>)> {
     let now_ms = now_unix_ms();
     let cutoff_ms = now_ms - state.bus_ttl_ms;
     let mut redis_conn = state
@@ -415,7 +459,7 @@ pub async fn load_active_bus_snapshot(
         .map_err(internal_error)?;
 
     let stale_bus_ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
-        .arg(REDIS_BUSES_LAST_SEEN_KEY)
+        .arg(last_seen_key)
         .arg("-inf")
         .arg(cutoff_ms)
         .query_async(&mut redis_conn)
@@ -426,17 +470,17 @@ pub async fn load_active_bus_snapshot(
         let mut delete_pipe = redis::pipe();
         delete_pipe
             .cmd("HDEL")
-            .arg(REDIS_BUSES_LATEST_KEY)
+            .arg(latest_key)
             .arg(&stale_bus_ids)
             .ignore();
         delete_pipe
             .cmd("HDEL")
-            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(motion_key)
             .arg(&stale_bus_ids)
             .ignore();
         delete_pipe
             .cmd("ZREMRANGEBYSCORE")
-            .arg(REDIS_BUSES_LAST_SEEN_KEY)
+            .arg(last_seen_key)
             .arg("-inf")
             .arg(cutoff_ms)
             .ignore();
@@ -447,7 +491,7 @@ pub async fn load_active_bus_snapshot(
     }
 
     let active_bus_ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
-        .arg(REDIS_BUSES_LAST_SEEN_KEY)
+        .arg(last_seen_key)
         .arg(cutoff_ms + 1)
         .arg("+inf")
         .query_async(&mut redis_conn)
@@ -458,7 +502,7 @@ pub async fn load_active_bus_snapshot(
         Vec::new()
     } else {
         let raw_buses: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(REDIS_BUSES_LATEST_KEY)
+            .arg(latest_key)
             .arg(&active_bus_ids)
             .query_async(&mut redis_conn)
             .await
@@ -475,7 +519,7 @@ pub async fn load_active_bus_snapshot(
         HashMap::new()
     } else {
         let raw_states: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(motion_key)
             .arg(&active_bus_ids)
             .query_async(&mut redis_conn)
             .await
@@ -496,7 +540,7 @@ pub async fn load_active_bus_snapshot(
     };
 
     let last_ingest_at_unix_ms: Option<i64> = redis::cmd("GET")
-        .arg(REDIS_INGEST_LAST_KEY)
+        .arg(ingest_key)
         .query_async(&mut redis_conn)
         .await
         .unwrap_or(None);
@@ -744,7 +788,7 @@ pub async fn record_ingestor_error(state: &AppState, message: String, count_reco
     }
 }
 
-fn internal_error(error: impl std::fmt::Display) -> (StatusCode, Json<ErrorResponse>) {
+pub fn internal_error(error: impl std::fmt::Display) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         Json(ErrorResponse {

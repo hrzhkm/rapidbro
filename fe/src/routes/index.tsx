@@ -78,11 +78,17 @@ const panelSectionClass =
 const panelSubtleTextClass = 'text-xs text-slate-600'
 const BUS_GRACE_WINDOW_MS = 5 * 60 * 1000
 
+// Perlis / northern Kedah bounding box — routes to /kangar/* endpoints.
+function isKangarRegion(lat: number, lon: number): boolean {
+  return lat >= 5.5 && lat <= 6.7 && lon >= 99.5 && lon <= 101.0
+}
+
 function App() {
   const apiBaseUrl = useMemo(
     () => import.meta.env.VITE_BE_URL ?? 'http://localhost:3030',
     [],
   )
+  const [apiRegionPrefix, setApiRegionPrefix] = useState<'' | '/kangar'>('')
   const hasAutoRequestedNearestStopRef = useRef(false)
   const nearestStopEtaRef = useRef<BusEta[]>([])
   const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
@@ -174,13 +180,13 @@ function App() {
     nearestStopEtaRef.current = nearestStopEta
   }, [nearestStopEta])
 
-  const fetchNearestStop = async (lat: number, lon: number) => {
+  const fetchNearestStop = async (lat: number, lon: number, prefix = apiRegionPrefix) => {
     const params = new URLSearchParams({
       lat: lat.toString(),
       lon: lon.toString(),
     })
     const response = await fetch(
-      `${apiBaseUrl}/stops/nearest?${params.toString()}`,
+      `${apiBaseUrl}${prefix}/stops/nearest?${params.toString()}`,
     )
     if (!response.ok) {
       const fallbackMessage = 'Unable to fetch nearest bus stop'
@@ -195,7 +201,7 @@ function App() {
     return data
   }
 
-  const fetchEtaToStop = async (stopId: string) => {
+  const fetchEtaToStop = async (stopId: string, prefix = apiRegionPrefix) => {
     setEtaErrorMessage(null)
     setSelectedRouteErrorMessage(null)
     setIsLoadingEta(true)
@@ -207,7 +213,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `${apiBaseUrl}/stops/${encodeURIComponent(stopId)}/eta`,
+        `${apiBaseUrl}${prefix}/stops/${encodeURIComponent(stopId)}/eta`,
       )
       if (!response.ok) {
         const fallbackMessage = 'Unable to fetch ETA for nearest stop'
@@ -300,7 +306,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `${apiBaseUrl}/route/${encodeURIComponent(routeId)}/stops`,
+        `${apiBaseUrl}${apiRegionPrefix}/route/${encodeURIComponent(routeId)}/stops`,
       )
       if (!response.ok) {
         const fallbackMessage = 'Unable to fetch route stops'
@@ -354,7 +360,7 @@ function App() {
     try {
       const params = stopId ? `?stop_id=${encodeURIComponent(stopId)}` : ''
       const response = await fetch(
-        `${apiBaseUrl}/route/${encodeURIComponent(routeId)}/shape${params}`,
+        `${apiBaseUrl}${apiRegionPrefix}/route/${encodeURIComponent(routeId)}/shape${params}`,
       )
       if (!response.ok) {
         const fallbackMessage = 'Unable to fetch route shape'
@@ -385,14 +391,14 @@ function App() {
     }
   }
 
-  const fetchRoutesForStop = async (stopId: string) => {
+  const fetchRoutesForStop = async (stopId: string, prefix = apiRegionPrefix) => {
     setRouteErrorMessage(null)
     setStopRoutes([])
     setIsLoadingRoutes(true)
 
     try {
       const response = await fetch(
-        `${apiBaseUrl}/stops/${encodeURIComponent(stopId)}/routes`,
+        `${apiBaseUrl}${prefix}/stops/${encodeURIComponent(stopId)}/routes`,
       )
       if (!response.ok) {
         const fallbackMessage = 'Unable to fetch routes for nearest stop'
@@ -563,10 +569,13 @@ function App() {
       const lon = position.coords.longitude
       setCoords({ lat, lon })
 
-      const nearestStopData = await fetchNearestStop(lat, lon)
+      const prefix = isKangarRegion(lat, lon) ? '/kangar' : ''
+      setApiRegionPrefix(prefix)
+
+      const nearestStopData = await fetchNearestStop(lat, lon, prefix)
       await Promise.all([
-        fetchEtaToStop(nearestStopData.stop_id),
-        fetchRoutesForStop(nearestStopData.stop_id),
+        fetchEtaToStop(nearestStopData.stop_id, prefix),
+        fetchRoutesForStop(nearestStopData.stop_id, prefix),
       ])
       setLastFetchedAt(new Date())
     } catch (error) {

@@ -4,9 +4,8 @@ use rust_socketio::{asynchronous::ClientBuilder, Payload, TransportType};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::fs::File;
-use std::path::{Path as StdPath, PathBuf};
+use std::path::Path as StdPath;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -54,7 +53,9 @@ pub struct Route {
     pub route_short_name: String,
     pub route_long_name: String,
     pub route_type: u32,
+    #[serde(default)]
     pub route_color: String,
+    #[serde(default)]
     pub route_text_color: String,
 }
 
@@ -75,6 +76,7 @@ pub struct StopTime {
     pub departure_time: String,
     pub stop_id: String,
     pub stop_sequence: u32,
+    #[serde(default)]
     pub stop_headsign: Option<String>,
 }
 
@@ -82,6 +84,7 @@ pub struct StopTime {
 pub struct Stop {
     pub stop_id: String,
     pub stop_name: String,
+    #[serde(default)]
     pub stop_desc: String,
     pub stop_lat: f64,
     pub stop_lon: f64,
@@ -201,14 +204,14 @@ pub struct GtfsCache {
 // ── GtfsCache builder ─────────────────────────────────────────────────────────
 
 impl GtfsCache {
-    pub fn build() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn build(data_dir: &StdPath) -> Result<Self, Box<dyn std::error::Error>> {
         let context = GtfsContext {
-            routes: load_routes()?,
-            trips_by_route: load_trips()?,
-            stop_times_by_trip: load_stop_times()?,
-            stops_map: load_stops()?,
+            routes: load_routes(data_dir)?,
+            trips_by_route: load_trips(data_dir)?,
+            stop_times_by_trip: load_stop_times(data_dir)?,
+            stops_map: load_stops(data_dir)?,
         };
-        let shapes_by_id = load_shapes()?;
+        let shapes_by_id = load_shapes(data_dir)?;
         let mut route_stops_by_route: HashMap<String, RouteStopsResponse> = HashMap::new();
 
         for route in &context.routes {
@@ -260,19 +263,12 @@ impl GtfsCache {
 
 // ── GTFS file loaders (private) ───────────────────────────────────────────────
 
-fn gtfs_data_dir() -> PathBuf {
-    if let Ok(path) = env::var("GTFS_DATA_PATH") {
-        return PathBuf::from(path);
-    }
-
-    StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/rapid-kl")
-}
-
-fn load_routes() -> Result<Vec<Route>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("routes.txt");
+fn load_routes(data_dir: &StdPath) -> Result<Vec<Route>, Box<dyn std::error::Error>> {
+    let path = data_dir.join("routes.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .from_reader(file);
     let mut routes = Vec::new();
     for result in rdr.deserialize() {
@@ -282,11 +278,12 @@ fn load_routes() -> Result<Vec<Route>, Box<dyn std::error::Error>> {
     Ok(routes)
 }
 
-fn load_trips() -> Result<HashMap<String, Vec<Trip>>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("trips.txt");
+fn load_trips(data_dir: &StdPath) -> Result<HashMap<String, Vec<Trip>>, Box<dyn std::error::Error>> {
+    let path = data_dir.join("trips.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .from_reader(file);
     let mut trips_by_route: HashMap<String, Vec<Trip>> = HashMap::new();
     for result in rdr.deserialize() {
@@ -299,11 +296,12 @@ fn load_trips() -> Result<HashMap<String, Vec<Trip>>, Box<dyn std::error::Error>
     Ok(trips_by_route)
 }
 
-fn load_stop_times() -> Result<HashMap<String, Vec<StopTime>>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("stop_times.txt");
+fn load_stop_times(data_dir: &StdPath) -> Result<HashMap<String, Vec<StopTime>>, Box<dyn std::error::Error>> {
+    let path = data_dir.join("stop_times.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .from_reader(file);
     let mut stop_times_by_trip: HashMap<String, Vec<StopTime>> = HashMap::new();
     for result in rdr.deserialize() {
@@ -316,11 +314,12 @@ fn load_stop_times() -> Result<HashMap<String, Vec<StopTime>>, Box<dyn std::erro
     Ok(stop_times_by_trip)
 }
 
-fn load_stops() -> Result<HashMap<String, Stop>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("stops.txt");
+fn load_stops(data_dir: &StdPath) -> Result<HashMap<String, Stop>, Box<dyn std::error::Error>> {
+    let path = data_dir.join("stops.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .from_reader(file);
     let mut stops_map = HashMap::new();
     for result in rdr.deserialize() {
@@ -330,11 +329,12 @@ fn load_stops() -> Result<HashMap<String, Stop>, Box<dyn std::error::Error>> {
     Ok(stops_map)
 }
 
-fn load_shapes() -> Result<HashMap<String, Vec<ShapePoint>>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("shapes.txt");
+fn load_shapes(data_dir: &StdPath) -> Result<HashMap<String, Vec<ShapePoint>>, Box<dyn std::error::Error>> {
+    let path = data_dir.join("shapes.txt");
     let file = File::open(path)?;
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .from_reader(file);
     let mut shapes_by_id: HashMap<String, Vec<ShapePoint>> = HashMap::new();
     for result in rdr.deserialize() {
@@ -673,6 +673,27 @@ pub async fn write_buses_to_redis(
     buses: &[BusPosition],
     now_ms: i64,
 ) -> Result<usize, String> {
+    write_buses_to_redis_with_keys(
+        redis_conn,
+        buses,
+        now_ms,
+        REDIS_BUSES_LATEST_KEY,
+        REDIS_BUSES_LAST_SEEN_KEY,
+        REDIS_BUSES_MOTION_KEY,
+        REDIS_INGEST_LAST_KEY,
+    )
+    .await
+}
+
+pub async fn write_buses_to_redis_with_keys(
+    redis_conn: &mut redis::aio::MultiplexedConnection,
+    buses: &[BusPosition],
+    now_ms: i64,
+    latest_key: &str,
+    last_seen_key: &str,
+    motion_key: &str,
+    ingest_key: &str,
+) -> Result<usize, String> {
     let mut serialized_entries: Vec<(String, String)> = Vec::new();
     let valid_buses: HashMap<String, &BusPosition> = buses
         .iter()
@@ -685,7 +706,7 @@ pub async fn write_buses_to_redis(
         HashMap::new()
     } else {
         let raw_states: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(motion_key)
             .arg(&bus_ids)
             .query_async(redis_conn)
             .await
@@ -733,24 +754,24 @@ pub async fn write_buses_to_redis(
         );
 
         pipe.cmd("HSET")
-            .arg(REDIS_BUSES_LATEST_KEY)
+            .arg(latest_key)
             .arg(bus_no)
             .arg(bus_json)
             .ignore();
         pipe.cmd("HSET")
-            .arg(REDIS_BUSES_MOTION_KEY)
+            .arg(motion_key)
             .arg(bus_no)
             .arg(serde_json::to_string(&motion_state).map_err(|error| error.to_string())?)
             .ignore();
         pipe.cmd("ZADD")
-            .arg(REDIS_BUSES_LAST_SEEN_KEY)
+            .arg(last_seen_key)
             .arg(now_ms)
             .arg(bus_no)
             .ignore();
     }
 
     pipe.cmd("SET")
-        .arg(REDIS_INGEST_LAST_KEY)
+        .arg(ingest_key)
         .arg(now_ms)
         .ignore();
 

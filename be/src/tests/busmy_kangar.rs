@@ -1,65 +1,81 @@
 use crate::busmy_kangar::{
-    fetch_mybas_kangar_positions, MybasKangarPosition, REDIS_MYBAS_KANGAR_INGEST_LAST_KEY,
+    fetch_kangar_bus_positions, REDIS_MYBAS_KANGAR_INGEST_LAST_KEY,
     REDIS_MYBAS_KANGAR_LAST_SEEN_KEY, REDIS_MYBAS_KANGAR_LATEST_KEY,
+    REDIS_MYBAS_KANGAR_MOTION_KEY,
 };
+use crate::rapidkl::GtfsCache;
+use crate::get_route_stops_from_cache;
+use std::path::Path;
 
-// ── Serialization ─────────────────────────────────────────────────────────────
+fn kangar_data_dir() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-kangar")
+}
+
+// ── GTFS cache ────────────────────────────────────────────────────────────────
 
 #[test]
-fn position_serializes_and_deserializes() {
-    let original = MybasKangarPosition {
-        vehicle_id: "BUS-001".to_string(),
-        label: Some("K01".to_string()),
-        latitude: 6.1248,
-        longitude: 100.3673,
-        speed: 40.5,
-        bearing: 270.0,
-        route_id: Some("KANGAR-01".to_string()),
-        trip_id: Some("TRIP-999".to_string()),
-        timestamp: Some(1_700_000_000),
-    };
+fn kangar_gtfs_cache_builds_successfully() {
+    let cache = GtfsCache::build(&kangar_data_dir()).expect("kangar cache should build");
 
-    let json = serde_json::to_string(&original).expect("should serialize");
-    let restored: MybasKangarPosition =
-        serde_json::from_str(&json).expect("should deserialize");
-
-    assert_eq!(restored.vehicle_id, original.vehicle_id);
-    assert_eq!(restored.label, original.label);
-    assert!((restored.latitude - original.latitude).abs() < 1e-6);
-    assert!((restored.longitude - original.longitude).abs() < 1e-6);
-    assert!((restored.speed - original.speed).abs() < 1e-6);
-    assert!((restored.bearing - original.bearing).abs() < 1e-6);
-    assert_eq!(restored.route_id, original.route_id);
-    assert_eq!(restored.trip_id, original.trip_id);
-    assert_eq!(restored.timestamp, original.timestamp);
+    assert!(
+        !cache.route_stops_by_route.is_empty(),
+        "kangar cache should have at least one route"
+    );
+    assert!(
+        !cache.context.stops_map.is_empty(),
+        "kangar cache should have at least one stop"
+    );
+    assert!(
+        !cache.routes_by_stop.is_empty(),
+        "kangar cache should have route-by-stop index"
+    );
 }
 
 #[test]
-fn position_with_all_optional_fields_none_serializes() {
-    let pos = MybasKangarPosition {
-        vehicle_id: "BUS-002".to_string(),
-        label: None,
-        latitude: 6.1248,
-        longitude: 100.3673,
-        speed: 0.0,
-        bearing: 0.0,
-        route_id: None,
-        trip_id: None,
-        timestamp: None,
-    };
+fn kangar_stops_are_in_perlis_region() {
+    let cache = GtfsCache::build(&kangar_data_dir()).expect("kangar cache should build");
 
-    let json = serde_json::to_string(&pos).expect("should serialize with None fields");
-    let restored: MybasKangarPosition =
-        serde_json::from_str(&json).expect("should deserialize with None fields");
-
-    assert_eq!(restored.vehicle_id, "BUS-002");
-    assert!(restored.label.is_none());
-    assert!(restored.route_id.is_none());
-    assert!(restored.trip_id.is_none());
-    assert!(restored.timestamp.is_none());
+    for stop in cache.context.stops_map.values() {
+        assert!(
+            stop.stop_lat >= 4.0 && stop.stop_lat <= 7.0,
+            "stop {} lat {} outside expected Perlis/north Malaysia range",
+            stop.stop_id,
+            stop.stop_lat
+        );
+        assert!(
+            stop.stop_lon >= 99.0 && stop.stop_lon <= 102.0,
+            "stop {} lon {} outside expected Perlis/north Malaysia range",
+            stop.stop_id,
+            stop.stop_lon
+        );
+    }
 }
 
-// ── Redis key constants ───────────────────────────────────────────────────────
+#[test]
+fn kangar_route_stops_are_sequence_sorted() {
+    let cache = GtfsCache::build(&kangar_data_dir()).expect("kangar cache should build");
+
+    let first_route_id = cache
+        .route_stops_by_route
+        .keys()
+        .next()
+        .expect("should have at least one route");
+
+    let route = get_route_stops_from_cache(first_route_id, &cache)
+        .expect("route stops should be available");
+
+    assert!(!route.stops.is_empty(), "route should include stops");
+    let mut last_seq = 0;
+    for stop in &route.stops {
+        assert!(
+            stop.sequence >= last_seq,
+            "stop sequences must be sorted"
+        );
+        last_seq = stop.sequence;
+    }
+}
+
+// ── Redis key namespacing ─────────────────────────────────────────────────────
 
 #[test]
 fn redis_keys_are_namespaced_separately_from_rapidkl() {
@@ -70,6 +86,10 @@ fn redis_keys_are_namespaced_separately_from_rapidkl() {
     assert!(
         REDIS_MYBAS_KANGAR_LAST_SEEN_KEY.contains("mybas-kangar"),
         "last-seen key must be scoped to mybas-kangar"
+    );
+    assert!(
+        REDIS_MYBAS_KANGAR_MOTION_KEY.contains("mybas-kangar"),
+        "motion key must be scoped to mybas-kangar"
     );
     assert!(
         REDIS_MYBAS_KANGAR_INGEST_LAST_KEY.contains("mybas-kangar"),
@@ -86,13 +106,18 @@ fn redis_keys_are_namespaced_separately_from_rapidkl() {
         crate::REDIS_BUSES_LAST_SEEN_KEY,
         "mybas-kangar last-seen key must not clash with rapidkl"
     );
+    assert_ne!(
+        REDIS_MYBAS_KANGAR_MOTION_KEY,
+        crate::REDIS_BUSES_MOTION_KEY,
+        "mybas-kangar motion key must not clash with rapidkl"
+    );
 }
 
-// ── Integration: live fetch ───────────────────────────────────────────────────
+// ── Integration: live fetch returns BusPosition ──────────────────────────────
 
 #[tokio::test]
-async fn fetch_mybas_kangar_positions_returns_vehicle_data() {
-    let positions = fetch_mybas_kangar_positions()
+async fn fetch_kangar_bus_positions_returns_bus_position_data() {
+    let positions = fetch_kangar_bus_positions()
         .await
         .expect("fetch should succeed against live API");
 
@@ -103,24 +128,34 @@ async fn fetch_mybas_kangar_positions_returns_vehicle_data() {
 
     for pos in &positions {
         assert!(
-            !pos.vehicle_id.is_empty(),
-            "every position must have a non-empty vehicle_id"
+            !pos.bus_no.is_empty(),
+            "every position must have a non-empty bus_no (mapped from vehicle_id)"
+        );
+        assert_eq!(
+            pos.provider, "MYBAS-KANGAR",
+            "provider must be MYBAS-KANGAR"
         );
         assert!(
             pos.latitude >= 4.0 && pos.latitude <= 7.0,
-            "latitude {} is outside expected Perlis/north Malaysia range",
+            "latitude {} outside expected Perlis/north Malaysia range",
             pos.latitude
         );
         assert!(
             pos.longitude >= 99.0 && pos.longitude <= 102.0,
-            "longitude {} is outside expected Perlis/north Malaysia range",
+            "longitude {} outside expected Perlis/north Malaysia range",
             pos.longitude
+        );
+        // Speed was converted from m/s to km/h
+        assert!(
+            pos.speed >= 0.0,
+            "speed must be non-negative, got {}",
+            pos.speed
         );
     }
 
     println!(
-        "[busmy_kangar integration] {} positions fetched, first: {:?}",
+        "[busmy_kangar integration] {} positions fetched, first bus_no: {}",
         positions.len(),
-        positions.first()
+        positions.first().map(|p| p.bus_no.as_str()).unwrap_or("?")
     );
 }
