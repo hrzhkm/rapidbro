@@ -22,6 +22,8 @@ WORKDIR /app/fe
 COPY --from=builder /app/fe/.output ./.output
 
 # Prisma CLI and engines needed for migrate deploy
+# pnpm stores packages in .pnpm; the @prisma and prisma dirs are symlinks into it
+COPY --from=builder /app/fe/node_modules/.pnpm ./node_modules/.pnpm
 COPY --from=builder /app/fe/node_modules/.bin/prisma ./node_modules/.bin/prisma
 COPY --from=builder /app/fe/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/fe/node_modules/@prisma ./node_modules/@prisma
