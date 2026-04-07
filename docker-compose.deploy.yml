@@ -35,12 +35,9 @@ services:
     image: ${GHCR_NAMESPACE}/rapidbro-be:${IMAGE_TAG}
     restart: always
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
     environment:
-      DATABASE_URL: postgres://rapidbro:${POSTGRES_PASSWORD}@postgres:5432/rapidbro
       REDIS_URL: redis://redis:6379/
       BUS_TTL_SECONDS: "300"
       STALE_AFTER_SECONDS: "20"
@@ -54,7 +51,11 @@ services:
   fe:
     image: ${GHCR_NAMESPACE}/rapidbro-fe:${IMAGE_TAG}
     restart: always
+    environment:
+      DATABASE_URL: postgres://rapidbro:${POSTGRES_PASSWORD}@postgres:5432/rapidbro
     depends_on:
+      postgres:
+        condition: service_healthy
       be:
         condition: service_started
     ports:

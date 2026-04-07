@@ -96,4 +96,4 @@ jobs:
           export GHCR_NAMESPACE="ghcr.io/${OWNER_LC}"
           export IMAGE_TAG
           export POSTGRES_PASSWORD
-          docker compose -f docker-compose.deploy.yml exec -T be npx prisma migrate deploy
+          docker compose -f docker-compose.deploy.yml exec -T fe npx prisma migrate deploy
