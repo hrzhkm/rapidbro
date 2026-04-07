@@ -7,9 +7,8 @@ type SubmitFeedbackInput = {
 }
 
 export const submitFeedback = createServerFn({ method: 'POST' })
-  .validator((data: SubmitFeedbackInput) => data)
-  .handler(async ({ data }) => {
-    const trimmed = data.message.trim()
+  .handler(async ({ data }: { data: SubmitFeedbackInput }) => {
+    const trimmed = (data.message ?? '').trim()
     if (!trimmed) {
       throw new Error('Feedback message cannot be empty.')
     }
