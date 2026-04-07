@@ -1,22 +1,22 @@
 route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
-J10CWLMYJB,CWLMYJB,J10,JB Sentral - Terminal Bas Kota Tinggi,J10: JB Sentral - Terminal Bas Kota,3,,FFF300,111111
+J10CWLMYJB,CWLMYJB,J10,JB Sentral - Terminal Bas Kota Tinggi,J10: JB Sentral - Terminal Bas Kota Tinggi,3,,FFF300,111111
 J100CWLMYJB,CWLMYJB,J100,JB Sentral  KSL - JB Sentral,J100: JB Sentral  KSL - JB Sentral,3,,FFF300,111111
-J11CWLMYJB,CWLMYJB,J11,JB Sentral - AEON Dato Onn via Setia Indah,J11: JB Sentral - AEON Dato Onn via,3,,FFF300,111111
-J13CWLMYJB,CWLMYJB,J13,JB Sentral - Larkin Sentral via Mahmoodiah,J13: JB Sentral - Larkin Sentral vi,3,,FFF300,111111
-J15CWLMYJB,CWLMYJB,J15,JB Sentral - Mid Valley Southkey,J15: JB Sentral - Mid Valley Southk,3,,FFF300,111111
-J16CWLMYJB,CWLMYJB,J16,B5 Johor Street Market / Plaza Angsana - Toppen Tebrau,J16: B5 Johor Street Market / Plaza,3,,FFF300,111111
-J20CWLMYJB,CWLMYJB,J20,JB Sentral - Terminal Bas Masai,J20: JB Sentral - Terminal Bas Masa,3,,FFF300,111111
-J200CWLMYJB,CWLMYJB,J200,Terminal Masai  PPR Seri Alam - Terminal Masai,J200: Terminal Masai  PPR Seri Alam,3,,FFF300,111111
-J205CWLMYJB,CWLMYJB,J205,Terminal Bas Masai - Lotus Kota Masai,J205: Terminal Bas Masai - Lotus Kot,3,,FFF300,111111
+J11CWLMYJB,CWLMYJB,J11,JB Sentral - AEON Dato Onn via Setia Indah,J11: JB Sentral - AEON Dato Onn via Setia Indah,3,,FFF300,111111
+J13CWLMYJB,CWLMYJB,J13,JB Sentral - Larkin Sentral via Mahmoodiah,J13: JB Sentral - Larkin Sentral via Mahmoodiah,3,,FFF300,111111
+J15CWLMYJB,CWLMYJB,J15,JB Sentral - Mid Valley Southkey,J15: JB Sentral - Mid Valley Southkey,3,,FFF300,111111
+J16CWLMYJB,CWLMYJB,J16,B5 Johor Street Market / Plaza Angsana - Toppen Tebrau,J16: B5 Johor Street Market / Plaza Angsana - Toppen Tebrau,3,,FFF300,111111
+J20CWLMYJB,CWLMYJB,J20,JB Sentral - Terminal Bas Masai,J20: JB Sentral - Terminal Bas Masai,3,,FFF300,111111
+J200CWLMYJB,CWLMYJB,J200,Terminal Masai  PPR Seri Alam - Terminal Masai,J200: Terminal Masai  PPR Seri Alam - Terminal Masai,3,,FFF300,111111
+J205CWLMYJB,CWLMYJB,J205,Terminal Bas Masai - Lotus Kota Masai,J205: Terminal Bas Masai - Lotus Kota Masai,3,,FFF300,111111
 J21CWLMYJB,CWLMYJB,J21,JB Sentral - Permas Jaya,J21: JB Sentral - Permas Jaya,3,,FFF300,111111
-J22CWLMYJB,CWLMYJB,J22,JB Sentral - Taman Scientex Pasir Gudang,J22: JB Sentral - Taman Scientex Pa,3,,FFF300,111111
+J22CWLMYJB,CWLMYJB,J22,JB Sentral - Taman Scientex Pasir Gudang,J22: JB Sentral - Taman Scientex Pasir Gudang,3,,FFF300,111111
 J30CWLMYJB,CWLMYJB,J30,JB Sentral - Terminal Kulai,J30: JB Sentral - Terminal Kulai,3,,FFF300,111111
-J300CWLMYJB,CWLMYJB,J300,Terminal Kulai - Taman Putri Kulai,J300: Terminal Kulai - Taman Putri K,3,,FFF300,111111
-J31CWLMYJB,CWLMYJB,J31,JB Sentral - Taman Pulai Mutiara,J31: JB Sentral - Taman Pulai Mutia,3,,FFF300,111111
-J32CWLMYJB,CWLMYJB,J32,JB Sentral - Bandar Selesa Jaya,J32: JB Sentral - Bandar Selesa Jay,3,,FFF300,111111
-J33CWLMYJB,CWLMYJB,J33,JB Sentral - Taman Tan Sri Yaacob,J33: JB Sentral - Taman Tan Sri Yaa,3,,FFF300,111111
-J34CWLMYJB,CWLMYJB,J34,JB Sentral - Terminal Sutera Mall,J34: JB Sentral - Terminal Sutera M,3,,FFF300,111111
-J40CWLMYJB,CWLMYJB,J40,Larkin Sentral - Gelang Patah Sentral,J40: Larkin Sentral - Gelang Patah ,3,,FFF300,111111
+J300CWLMYJB,CWLMYJB,J300,Terminal Kulai - Taman Putri Kulai,J300: Terminal Kulai - Taman Putri Kulai,3,,FFF300,111111
+J31CWLMYJB,CWLMYJB,J31,JB Sentral - Taman Pulai Mutiara,J31: JB Sentral - Taman Pulai Mutiara,3,,FFF300,111111
+J32CWLMYJB,CWLMYJB,J32,JB Sentral - Bandar Selesa Jaya,J32: JB Sentral - Bandar Selesa Jaya,3,,FFF300,111111
+J33CWLMYJB,CWLMYJB,J33,JB Sentral - Taman Tan Sri Yaacob,J33: JB Sentral - Taman Tan Sri Yaacob,3,,FFF300,111111
+J34CWLMYJB,CWLMYJB,J34,JB Sentral - Terminal Sutera Mall,J34: JB Sentral - Terminal Sutera Mall,3,,FFF300,111111
+J40CWLMYJB,CWLMYJB,J40,Larkin Sentral - Gelang Patah Sentral,J40: Larkin Sentral - Gelang Patah Sentral,3,,FFF300,111111
 J42CWLMYJB,CWLMYJB,J42,Terminal Gelang Patah - Pendas,J42: Terminal Gelang Patah - Pendas,3,,FFF300,111111
-J44CWLMYJB,CWLMYJB,J44,Larkin Sentral - Terminal Feri Puteri Harbour melalui AEON Bukit Indah,J44: Larkin Sentral - Terminal Feri,3,,FFF300,111111
+J44CWLMYJB,CWLMYJB,J44,Larkin Sentral - Terminal Feri Puteri Harbour melalui AEON Bukit Indah,J44: Larkin Sentral - Terminal Feri Puteri Harbour melalui AEON Bukit Indah,3,,FFF300,111111
 J50CWLMYJB,CWLMYJB,J50,Larkin Sentral - Pontian,J50: Larkin Sentral - Pontian,3,,FFF300,111111
