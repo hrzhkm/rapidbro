@@ -85,3 +85,15 @@ jobs:
           export POSTGRES_PASSWORD
           docker compose -f docker-compose.deploy.yml pull
           docker compose -f docker-compose.deploy.yml up -d --remove-orphans
+
+      - name: Run Prisma migrations
+        env:
+          OWNER: ${{ github.repository_owner }}
+          IMAGE_TAG: ${{ github.sha }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          export GHCR_NAMESPACE="ghcr.io/${OWNER_LC}"
+          export IMAGE_TAG
+          export POSTGRES_PASSWORD
+          docker compose -f docker-compose.deploy.yml exec -T be npx prisma migrate deploy

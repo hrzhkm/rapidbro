@@ -1,3 +1,6 @@
+networks:
+  rapidbro:
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -15,6 +18,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - rapidbro
 
   redis:
     image: redis:7-alpine
@@ -23,13 +28,19 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - rapidbro
 
   be:
     image: ${GHCR_NAMESPACE}/rapidbro-be:${IMAGE_TAG}
     restart: always
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     environment:
+      DATABASE_URL: postgres://rapidbro:${POSTGRES_PASSWORD}@postgres:5432/rapidbro
       REDIS_URL: redis://redis:6379/
       BUS_TTL_SECONDS: "300"
       STALE_AFTER_SECONDS: "20"
@@ -37,19 +48,19 @@ services:
       GTFS_DATA_PATH: /app/rapid_kl_data
     ports:
       - "3030:3030"
+    networks:
+      - rapidbro
 
   fe:
     image: ${GHCR_NAMESPACE}/rapidbro-fe:${IMAGE_TAG}
     restart: always
-    environment:
-      DATABASE_URL: postgres://rapidbro:${POSTGRES_PASSWORD}@postgres:5432/rapidbro
     depends_on:
-      postgres:
-        condition: service_healthy
       be:
         condition: service_started
     ports:
       - "3031:3000"
+    networks:
+      - rapidbro
 
 volumes:
   postgres_data:
