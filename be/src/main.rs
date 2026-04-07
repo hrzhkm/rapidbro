@@ -213,77 +213,73 @@ async fn main() {
         .query_async(&mut redis_conn)
         .await
         .unwrap_or_else(|error| panic!("Failed to ping Redis '{}': {}", redis_url, error));
-    let rapidkl_data_dir = StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/rapid-kl");
+    let bus_data_root = StdPath::new(
+        &std::env::var("BUS_DATA_DIR").unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string()),
+    )
+    .join("bus_data");
+
+    let rapidkl_data_dir = bus_data_root.join("rapid-kl");
     let gtfs_cache = Arc::new(
         GtfsCache::build(&rapidkl_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build RapidKL GTFS cache: {}", error)),
     );
 
-    let kangar_data_dir = StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-kangar");
+    let kangar_data_dir = bus_data_root.join("busmy-kangar");
     let kangar_gtfs_cache = Arc::new(
         GtfsCache::build(&kangar_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Kangar GTFS cache: {}", error)),
     );
 
-    let alor_setar_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-alor-setar");
+    let alor_setar_data_dir = bus_data_root.join("busmy-alor-setar");
     let alor_setar_gtfs_cache = Arc::new(
         GtfsCache::build(&alor_setar_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Alor Setar GTFS cache: {}", error)),
     );
 
-    let kota_bharu_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-kota-bharu");
+    let kota_bharu_data_dir = bus_data_root.join("busmy-kota-bharu");
     let kota_bharu_gtfs_cache = Arc::new(
         GtfsCache::build(&kota_bharu_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Kota Bharu GTFS cache: {}", error)),
     );
 
-    let kuala_terengganu_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-kuala-terengganu");
+    let kuala_terengganu_data_dir = bus_data_root.join("busmy-kuala-terengganu");
     let kuala_terengganu_gtfs_cache = Arc::new(
         GtfsCache::build(&kuala_terengganu_data_dir).unwrap_or_else(|error| {
             panic!("Failed to build Kuala Terengganu GTFS cache: {}", error)
         }),
     );
 
-    let ipoh_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-ipoh");
+    let ipoh_data_dir = bus_data_root.join("busmy-ipoh");
     let ipoh_gtfs_cache = Arc::new(
         GtfsCache::build(&ipoh_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Ipoh GTFS cache: {}", error)),
     );
 
-    let seremban_a_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-seremban-a");
+    let seremban_a_data_dir = bus_data_root.join("busmy-seremban-a");
     let seremban_a_gtfs_cache = Arc::new(
         GtfsCache::build(&seremban_a_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Seremban A GTFS cache: {}", error)),
     );
 
-    let seremban_b_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-seremban-b");
+    let seremban_b_data_dir = bus_data_root.join("busmy-seremban-b");
     let seremban_b_gtfs_cache = Arc::new(
         GtfsCache::build(&seremban_b_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Seremban B GTFS cache: {}", error)),
     );
 
-    let melaka_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-melaka");
+    let melaka_data_dir = bus_data_root.join("busmy-melaka");
     let melaka_gtfs_cache = Arc::new(
         GtfsCache::build(&melaka_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Melaka GTFS cache: {}", error)),
     );
 
-    let johor_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-johor-bharu");
+    let johor_data_dir = bus_data_root.join("busmy-johor-bharu");
     let johor_gtfs_cache = Arc::new(
         GtfsCache::build(&johor_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Johor GTFS cache: {}", error)),
     );
 
-    let kuching_data_dir =
-        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-kuching");
+    let kuching_data_dir = bus_data_root.join("busmy-kuching");
     let kuching_gtfs_cache = Arc::new(
         GtfsCache::build(&kuching_data_dir)
             .unwrap_or_else(|error| panic!("Failed to build Kuching GTFS cache: {}", error)),
