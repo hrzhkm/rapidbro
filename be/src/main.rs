@@ -5,6 +5,8 @@ mod busmy_kangar;
 mod busmy_alor_setar;
 #[path = "busmy-kota-bharu.rs"]
 mod busmy_kota_bharu;
+#[path = "busmy-kuala-terengganu.rs"]
+mod busmy_kuala_terengganu;
 
 use axum::{
     extract::{Path, Query, State},
@@ -76,6 +78,8 @@ pub struct AppState {
     pub alor_setar_fetch_lock: Arc<Mutex<()>>,
     pub kota_bharu_gtfs_cache: Arc<GtfsCache>,
     pub kota_bharu_fetch_lock: Arc<Mutex<()>>,
+    pub kuala_terengganu_gtfs_cache: Arc<GtfsCache>,
+    pub kuala_terengganu_fetch_lock: Arc<Mutex<()>>,
     pub bus_ttl_ms: i64,
     pub stale_after_ms: i64,
     pub stationary_window_ms: i64,
@@ -213,6 +217,14 @@ async fn main() {
             .unwrap_or_else(|error| panic!("Failed to build Kota Bharu GTFS cache: {}", error)),
     );
 
+    let kuala_terengganu_data_dir =
+        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-kuala-terengganu");
+    let kuala_terengganu_gtfs_cache = Arc::new(
+        GtfsCache::build(&kuala_terengganu_data_dir).unwrap_or_else(|error| {
+            panic!("Failed to build Kuala Terengganu GTFS cache: {}", error)
+        }),
+    );
+
     let app_state = AppState {
         redis_client: redis_client.clone(),
         ingestor_status: Arc::new(RwLock::new(IngestorStatus {
@@ -232,6 +244,8 @@ async fn main() {
         alor_setar_fetch_lock: Arc::new(Mutex::new(())),
         kota_bharu_gtfs_cache,
         kota_bharu_fetch_lock: Arc::new(Mutex::new(())),
+        kuala_terengganu_gtfs_cache,
+        kuala_terengganu_fetch_lock: Arc::new(Mutex::new(())),
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
         stationary_window_ms: stationary_window_seconds * 1_000,
@@ -335,6 +349,35 @@ async fn main() {
         .route(
             "/kota-bharu/stops/nearest",
             get(busmy_kota_bharu::kota_bharu_get_nearest_stop),
+        )
+        // ── Kuala Terengganu routes ──────────────────────────────────────
+        .route(
+            "/kuala-terengganu/get-all",
+            get(busmy_kuala_terengganu::kuala_terengganu_fetch_all_buses),
+        )
+        .route(
+            "/kuala-terengganu/route/{route_id}/eta/{stop_id}",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_route_eta),
+        )
+        .route(
+            "/kuala-terengganu/stops/{stop_id}/eta",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_stop_eta),
+        )
+        .route(
+            "/kuala-terengganu/stops/{stop_id}/routes",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_stop_routes),
+        )
+        .route(
+            "/kuala-terengganu/route/{route_id}/stops",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_route_stops),
+        )
+        .route(
+            "/kuala-terengganu/route/{route_id}/shape",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_route_shape),
+        )
+        .route(
+            "/kuala-terengganu/stops/nearest",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_nearest_stop),
         )
         .layer(cors)
         .with_state(app_state);
