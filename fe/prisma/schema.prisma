@@ -12,3 +12,10 @@ model Todo {
   title     String
   createdAt DateTime @default(now())
 }
+
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  message   String
+  region    String?
+  createdAt DateTime @default(now())
+}

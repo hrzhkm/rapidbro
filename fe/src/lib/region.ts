@@ -109,3 +109,8 @@ export function detectRegion(lat: number, lon: number): ApiRegionPrefix {
   )
   return match?.prefix ?? ''
 }
+
+export function getRegionName(prefix: ApiRegionPrefix): string {
+  if (prefix === '') return 'Klang Valley'
+  return REGIONS.find((r) => r.prefix === prefix)?.name ?? prefix.replace('/', '')
+}

@@ -7,7 +7,7 @@ import { MapPanelShell } from '@/components/MapPanelShell'
 import { Button } from '@/components/ui/button'
 import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import { getGeolocationPosition } from '@/lib/geolocation'
-import { detectRegion, type ApiRegionPrefix } from '@/lib/region'
+import { detectRegion, getRegionName, type ApiRegionPrefix } from '@/lib/region'
 import {
   buildRoutePrefetchWarning,
   buildVisibleRouteLayers,
@@ -733,6 +733,7 @@ function App() {
     <MapPanelShell
       map={mapContent}
       mapOverlay={locationOverlay}
+      feedbackRegion={coords ? getRegionName(apiRegionPrefix) : undefined}
       panelTitle="Nearest Bus Stop"
       panelDescription="Track buses around your current stop with live route context."
       panelStatus={
