@@ -4,6 +4,7 @@ mod busmy_alor_setar;
 mod busmy_kota_bharu;
 mod busmy_kuala_terengganu;
 mod busmy_ipoh;
+mod busmy_seremban;
 
 use super::*;
 use crate::rapidkl::{BusMotionState, BusPosition};

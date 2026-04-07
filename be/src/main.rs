@@ -9,6 +9,8 @@ mod busmy_kota_bharu;
 mod busmy_kuala_terengganu;
 #[path = "busmy-ipoh.rs"]
 mod busmy_ipoh;
+#[path = "busmy-seremban.rs"]
+mod busmy_seremban;
 
 use axum::{
     extract::{Path, Query, State},
@@ -84,6 +86,10 @@ pub struct AppState {
     pub kuala_terengganu_fetch_lock: Arc<Mutex<()>>,
     pub ipoh_gtfs_cache: Arc<GtfsCache>,
     pub ipoh_fetch_lock: Arc<Mutex<()>>,
+    pub seremban_a_gtfs_cache: Arc<GtfsCache>,
+    pub seremban_a_fetch_lock: Arc<Mutex<()>>,
+    pub seremban_b_gtfs_cache: Arc<GtfsCache>,
+    pub seremban_b_fetch_lock: Arc<Mutex<()>>,
     pub bus_ttl_ms: i64,
     pub stale_after_ms: i64,
     pub stationary_window_ms: i64,
@@ -236,6 +242,20 @@ async fn main() {
             .unwrap_or_else(|error| panic!("Failed to build Ipoh GTFS cache: {}", error)),
     );
 
+    let seremban_a_data_dir =
+        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-seremban-a");
+    let seremban_a_gtfs_cache = Arc::new(
+        GtfsCache::build(&seremban_a_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Seremban A GTFS cache: {}", error)),
+    );
+
+    let seremban_b_data_dir =
+        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-seremban-b");
+    let seremban_b_gtfs_cache = Arc::new(
+        GtfsCache::build(&seremban_b_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Seremban B GTFS cache: {}", error)),
+    );
+
     let app_state = AppState {
         redis_client: redis_client.clone(),
         ingestor_status: Arc::new(RwLock::new(IngestorStatus {
@@ -259,6 +279,10 @@ async fn main() {
         kuala_terengganu_fetch_lock: Arc::new(Mutex::new(())),
         ipoh_gtfs_cache,
         ipoh_fetch_lock: Arc::new(Mutex::new(())),
+        seremban_a_gtfs_cache,
+        seremban_a_fetch_lock: Arc::new(Mutex::new(())),
+        seremban_b_gtfs_cache,
+        seremban_b_fetch_lock: Arc::new(Mutex::new(())),
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
         stationary_window_ms: stationary_window_seconds * 1_000,
@@ -415,6 +439,64 @@ async fn main() {
             get(busmy_ipoh::ipoh_get_route_shape),
         )
         .route("/ipoh/stops/nearest", get(busmy_ipoh::ipoh_get_nearest_stop))
+        // ── Seremban A routes ────────────────────────────────────────────
+        .route(
+            "/seremban-a/get-all",
+            get(busmy_seremban::seremban_a_fetch_all_buses),
+        )
+        .route(
+            "/seremban-a/route/{route_id}/eta/{stop_id}",
+            get(busmy_seremban::seremban_a_get_route_eta),
+        )
+        .route(
+            "/seremban-a/stops/{stop_id}/eta",
+            get(busmy_seremban::seremban_a_get_stop_eta),
+        )
+        .route(
+            "/seremban-a/stops/{stop_id}/routes",
+            get(busmy_seremban::seremban_a_get_stop_routes),
+        )
+        .route(
+            "/seremban-a/route/{route_id}/stops",
+            get(busmy_seremban::seremban_a_get_route_stops),
+        )
+        .route(
+            "/seremban-a/route/{route_id}/shape",
+            get(busmy_seremban::seremban_a_get_route_shape),
+        )
+        .route(
+            "/seremban-a/stops/nearest",
+            get(busmy_seremban::seremban_a_get_nearest_stop),
+        )
+        // ── Seremban B routes ────────────────────────────────────────────
+        .route(
+            "/seremban-b/get-all",
+            get(busmy_seremban::seremban_b_fetch_all_buses),
+        )
+        .route(
+            "/seremban-b/route/{route_id}/eta/{stop_id}",
+            get(busmy_seremban::seremban_b_get_route_eta),
+        )
+        .route(
+            "/seremban-b/stops/{stop_id}/eta",
+            get(busmy_seremban::seremban_b_get_stop_eta),
+        )
+        .route(
+            "/seremban-b/stops/{stop_id}/routes",
+            get(busmy_seremban::seremban_b_get_stop_routes),
+        )
+        .route(
+            "/seremban-b/route/{route_id}/stops",
+            get(busmy_seremban::seremban_b_get_route_stops),
+        )
+        .route(
+            "/seremban-b/route/{route_id}/shape",
+            get(busmy_seremban::seremban_b_get_route_shape),
+        )
+        .route(
+            "/seremban-b/stops/nearest",
+            get(busmy_seremban::seremban_b_get_nearest_stop),
+        )
         .layer(cors)
         .with_state(app_state);
 
