@@ -88,7 +88,7 @@ const REGIONS: RegionDefinition[] = [
   {
     prefix: '/johor',
     name: 'Johor Bahru',
-    latMin: 1.3,
+    latMin: 1.48,
     latMax: 1.75,
     lonMin: 103.35,
     lonMax: 104.0,
