@@ -13,6 +13,8 @@ mod busmy_ipoh;
 mod busmy_seremban;
 #[path = "busmy-melaka.rs"]
 mod busmy_melaka;
+#[path = "busmy-johor-bharu.rs"]
+mod busmy_johor_bharu;
 
 use axum::{
     extract::{Path, Query, State},
@@ -94,6 +96,8 @@ pub struct AppState {
     pub seremban_b_fetch_lock: Arc<Mutex<()>>,
     pub melaka_gtfs_cache: Arc<GtfsCache>,
     pub melaka_fetch_lock: Arc<Mutex<()>>,
+    pub johor_gtfs_cache: Arc<GtfsCache>,
+    pub johor_fetch_lock: Arc<Mutex<()>>,
     pub bus_ttl_ms: i64,
     pub stale_after_ms: i64,
     pub stationary_window_ms: i64,
@@ -267,6 +271,13 @@ async fn main() {
             .unwrap_or_else(|error| panic!("Failed to build Melaka GTFS cache: {}", error)),
     );
 
+    let johor_data_dir =
+        StdPath::new(env!("CARGO_MANIFEST_DIR")).join("bus_data/busmy-johor-bharu");
+    let johor_gtfs_cache = Arc::new(
+        GtfsCache::build(&johor_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Johor GTFS cache: {}", error)),
+    );
+
     let app_state = AppState {
         redis_client: redis_client.clone(),
         ingestor_status: Arc::new(RwLock::new(IngestorStatus {
@@ -296,6 +307,8 @@ async fn main() {
         seremban_b_fetch_lock: Arc::new(Mutex::new(())),
         melaka_gtfs_cache,
         melaka_fetch_lock: Arc::new(Mutex::new(())),
+        johor_gtfs_cache,
+        johor_fetch_lock: Arc::new(Mutex::new(())),
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
         stationary_window_ms: stationary_window_seconds * 1_000,
@@ -535,6 +548,32 @@ async fn main() {
         .route(
             "/melaka/stops/nearest",
             get(busmy_melaka::melaka_get_nearest_stop),
+        )
+        // ── Johor routes ─────────────────────────────────────────────────
+        .route("/johor/get-all", get(busmy_johor_bharu::johor_fetch_all_buses))
+        .route(
+            "/johor/route/{route_id}/eta/{stop_id}",
+            get(busmy_johor_bharu::johor_get_route_eta),
+        )
+        .route(
+            "/johor/stops/{stop_id}/eta",
+            get(busmy_johor_bharu::johor_get_stop_eta),
+        )
+        .route(
+            "/johor/stops/{stop_id}/routes",
+            get(busmy_johor_bharu::johor_get_stop_routes),
+        )
+        .route(
+            "/johor/route/{route_id}/stops",
+            get(busmy_johor_bharu::johor_get_route_stops),
+        )
+        .route(
+            "/johor/route/{route_id}/shape",
+            get(busmy_johor_bharu::johor_get_route_shape),
+        )
+        .route(
+            "/johor/stops/nearest",
+            get(busmy_johor_bharu::johor_get_nearest_stop),
         )
         .layer(cors)
         .with_state(app_state);
