@@ -7,6 +7,7 @@ mod busmy_ipoh;
 mod busmy_seremban;
 mod busmy_melaka;
 mod busmy_johor_bharu;
+mod busmy_kuching;
 
 use super::*;
 use crate::rapidkl::{BusMotionState, BusPosition};
