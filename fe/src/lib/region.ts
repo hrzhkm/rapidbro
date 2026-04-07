@@ -7,6 +7,9 @@ export type ApiRegionPrefix =
   | '/ipoh'
   | '/seremban-a'
   | '/seremban-b'
+  | '/melaka'
+  | '/johor'
+  | '/kuching'
 
 type RegionDefinition = {
   prefix: ApiRegionPrefix
@@ -73,6 +76,30 @@ const REGIONS: RegionDefinition[] = [
     latMax: 3.15,
     lonMin: 101.7,
     lonMax: 102.45,
+  },
+  {
+    prefix: '/melaka',
+    name: 'Melaka',
+    latMin: 2.15,
+    latMax: 2.5,
+    lonMin: 102.05,
+    lonMax: 102.6,
+  },
+  {
+    prefix: '/johor',
+    name: 'Johor Bahru',
+    latMin: 1.3,
+    latMax: 1.75,
+    lonMin: 103.35,
+    lonMax: 104.0,
+  },
+  {
+    prefix: '/kuching',
+    name: 'Kuching',
+    latMin: 1.1,
+    latMax: 1.7,
+    lonMin: 110.1,
+    lonMax: 110.6,
   },
 ]
 
