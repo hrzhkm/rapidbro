@@ -29,7 +29,4 @@ export async function getGeolocationPosition(
   }
 }
 
-export {
-  COARSE_GEOLOCATION_OPTIONS,
-  PRECISE_GEOLOCATION_OPTIONS,
-}
+export { COARSE_GEOLOCATION_OPTIONS, PRECISE_GEOLOCATION_OPTIONS }

@@ -73,9 +73,15 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
           IMAGE_TAG: ${{ github.sha }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
+          if [ -z "${POSTGRES_PASSWORD}" ]; then
+            echo "POSTGRES_PASSWORD secret is not set. Add it in GitHub Actions Secrets."
+            exit 1
+          fi
           OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
           export GHCR_NAMESPACE="ghcr.io/${OWNER_LC}"
           export IMAGE_TAG
+          export POSTGRES_PASSWORD
           docker compose -f docker-compose.deploy.yml pull
           docker compose -f docker-compose.deploy.yml up -d --remove-orphans

@@ -1,4 +1,19 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: rapidbro
+      POSTGRES_USER: rapidbro
+      POSTGRES_PASSWORD: rapidbro
+    ports:
+      - "3002:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rapidbro -d rapidbro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
@@ -27,8 +42,13 @@ services:
       dockerfile: fe/Dockerfile
       args:
         VITE_BE_URL: http://localhost:3030
+    environment:
+      DATABASE_URL: postgres://rapidbro:rapidbro@postgres:5432/rapidbro
     depends_on:
-      - be
+      postgres:
+        condition: service_healthy
+      be:
+        condition: service_started
     ports:
       - "3031:3000"
     restart: always

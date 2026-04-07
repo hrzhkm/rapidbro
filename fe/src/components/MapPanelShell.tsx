@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PanelBottomOpen, PanelBottomClose } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { FeedbackButton } from '@/components/FeedbackButton'
 import { getMobilePanelTransformClass } from '@/lib/map-layout'
 
 type MapPanelShellProps = {
@@ -11,6 +12,7 @@ type MapPanelShellProps = {
   panelDescription?: string
   panelStatus?: React.ReactNode
   panelActions?: React.ReactNode
+  feedbackRegion?: string
   children: React.ReactNode
 }
 
@@ -21,6 +23,7 @@ function MapPanelShell({
   panelDescription,
   panelStatus,
   panelActions,
+  feedbackRegion,
   children,
 }: MapPanelShellProps) {
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false)
@@ -30,6 +33,10 @@ function MapPanelShell({
       <div className="absolute inset-0 z-0">{map}</div>
 
       <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_14%_18%,rgba(251,191,36,0.22),transparent_44%),radial-gradient(circle_at_86%_76%,rgba(34,211,238,0.18),transparent_40%),linear-gradient(to_bottom,rgba(255,251,235,0.12),rgba(255,251,235,0.02)_30%,rgba(251,191,36,0.12))]" />
+
+      <div className="absolute bottom-4 left-3 z-20 md:bottom-8 md:left-4 md:right-[28rem]">
+        <FeedbackButton region={feedbackRegion} />
+      </div>
 
       {mapOverlay ? (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-amber-50/40 p-6 backdrop-blur-sm md:pr-[28rem]">

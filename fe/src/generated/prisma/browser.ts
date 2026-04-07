@@ -22,3 +22,8 @@ export * from './enums.ts';
  * 
  */
 export type Todo = Prisma.TodoModel
+/**
+ * Model Feedback
+ * 
+ */
+export type Feedback = Prisma.FeedbackModel

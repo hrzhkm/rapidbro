@@ -1,3 +1,23 @@
+mod rapidkl;
+#[path = "busmy-kangar.rs"]
+mod busmy_kangar;
+#[path = "busmy-alor-setar.rs"]
+mod busmy_alor_setar;
+#[path = "busmy-kota-bharu.rs"]
+mod busmy_kota_bharu;
+#[path = "busmy-kuala-terengganu.rs"]
+mod busmy_kuala_terengganu;
+#[path = "busmy-ipoh.rs"]
+mod busmy_ipoh;
+#[path = "busmy-seremban.rs"]
+mod busmy_seremban;
+#[path = "busmy-melaka.rs"]
+mod busmy_melaka;
+#[path = "busmy-johor-bharu.rs"]
+mod busmy_johor_bharu;
+#[path = "busmy-kuching.rs"]
+mod busmy_kuching;
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -6,375 +26,169 @@ use axum::{
 };
 use base64::Engine;
 use flate2::read::GzDecoder;
-use futures_util::FutureExt;
 use prost::Message;
-use rust_socketio::{asynchronous::ClientBuilder, Payload, TransportType};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::collections::{HashMap, HashSet};
-use std::env;
-use std::fs::File;
 use std::io::Read;
-use std::path::{Path as StdPath, PathBuf};
+use std::path::Path as StdPath;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::{Notify, RwLock};
-use tokio::time::MissedTickBehavior;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::{Mutex, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BusPosition {
-    pub dt_received: Option<String>,
-    pub dt_gps: Option<String>,
-    pub latitude: f64,
-    pub longitude: f64,
-    pub dir: Option<String>,
-    pub speed: f64,
-    pub angle: f64,
-    pub route: String,
-    pub bus_no: String,
-    pub trip_no: Option<String>,
-    pub captain_id: Option<String>,
-    pub trip_rev_kind: Option<String>,
-    pub engine_status: i32,
-    pub accessibility: i32,
-    pub busstop_id: Option<String>,
-    pub provider: String,
-}
+use rapidkl::{
+    BusEta, BusMotionState, BusPosition, GtfsCache, RouteShapeResponse, RouteStopsResponse,
+    StopRouteSummary, StopWithDetails, get_pantai_hillpark_phase_5_eta, get_route_t789,
+    get_shape_by_route, get_t789_eta, is_bus_on_route, resolve_current_stop, run_bus_ingestor,
+};
 
-// GTFS data structures
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Route {
-    route_id: String,
-    agency_id: String,
-    route_short_name: String,
-    route_long_name: String,
-    route_type: u32,
-    route_color: String,
-    route_text_color: String,
-}
+// ── Generic structs ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Trip {
-    route_id: String,
-    service_id: String,
-    trip_id: String,
-    shape_id: String,
-    trip_headsign: Option<String>,
-    direction_id: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StopTime {
-    trip_id: String,
-    arrival_time: String,
-    departure_time: String,
-    stop_id: String,
-    stop_sequence: u32,
-    stop_headsign: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Stop {
-    stop_id: String,
-    stop_name: String,
-    stop_desc: String,
-    stop_lat: f64,
-    stop_lon: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StopWithDetails {
-    stop_id: String,
-    stop_name: String,
-    stop_desc: String,
-    stop_lat: f64,
-    stop_lon: f64,
-    sequence: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ShapePoint {
-    shape_id: String,
-    shape_pt_lat: f64,
-    shape_pt_lon: f64,
-    shape_pt_sequence: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RouteStopsResponse {
-    route_id: String,
-    route_short_name: String,
-    route_long_name: String,
-    stops: Vec<StopWithDetails>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ShapePointResponse {
-    lat: f64,
-    lon: f64,
-    sequence: u32,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct RouteShapeResponse {
-    route_id: String,
-    shape_id: String,
-    points: Vec<ShapePointResponse>,
+#[derive(Debug, Deserialize)]
+pub struct NearestStopQuery {
+    pub lat: f64,
+    pub lon: f64,
 }
 
 #[derive(Debug, Deserialize)]
-struct NearestStopQuery {
-    lat: f64,
-    lon: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct RouteShapeQuery {
-    stop_id: Option<String>,
+pub struct RouteShapeQuery {
+    pub stop_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-struct NearestStopResponse {
-    stop_id: String,
-    stop_name: String,
-    stop_desc: String,
-    stop_lat: f64,
-    stop_lon: f64,
-    distance_km: f64,
-    distance_meters: f64,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-struct StopRouteSummary {
-    route_id: String,
-    route_short_name: String,
-    route_long_name: String,
+pub struct NearestStopResponse {
+    pub stop_id: String,
+    pub stop_name: String,
+    pub stop_desc: String,
+    pub stop_lat: f64,
+    pub stop_lon: f64,
+    pub distance_km: f64,
+    pub distance_meters: f64,
 }
 
 #[derive(Debug, Serialize)]
-struct StopRoutesResponse {
-    stop_id: String,
-    routes: Vec<StopRouteSummary>,
+pub struct StopRoutesResponse {
+    pub stop_id: String,
+    pub routes: Vec<StopRouteSummary>,
 }
 
 #[derive(Debug, Serialize)]
-struct ErrorResponse {
-    error: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-enum StopResolutionSource {
-    Live,
-    Derived,
+pub struct ErrorResponse {
+    pub error: String,
 }
 
 #[derive(Debug, Clone)]
-struct ResolvedCurrentStop {
-    stop_id: String,
-    stop_name: String,
-    sequence: u32,
-    source: StopResolutionSource,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct BusEta {
-    route_id: String,
-    bus_no: String,
-    current_lat: f64,
-    current_lon: f64,
-    current_stop_id: String,
-    current_stop_name: String,
-    current_sequence: u32,
-    stop_resolution_source: StopResolutionSource,
-    stops_away: u32,
-    distance_km: f64,
-    speed_kmh: f64,
-    eta_minutes: f64,
-}
-
-#[derive(Debug, Clone)]
-struct AppState {
-    redis_client: redis::Client,
-    ingestor_status: Arc<RwLock<IngestorStatus>>,
-    gtfs_cache: Arc<GtfsCache>,
-    bus_ttl_ms: i64,
-    stale_after_ms: i64,
-    stationary_window_ms: i64,
+pub struct AppState {
+    pub redis_client: redis::Client,
+    pub ingestor_status: Arc<RwLock<IngestorStatus>>,
+    pub gtfs_cache: Arc<GtfsCache>,
+    pub kangar_gtfs_cache: Arc<GtfsCache>,
+    pub kangar_fetch_lock: Arc<Mutex<()>>,
+    pub alor_setar_gtfs_cache: Arc<GtfsCache>,
+    pub alor_setar_fetch_lock: Arc<Mutex<()>>,
+    pub kota_bharu_gtfs_cache: Arc<GtfsCache>,
+    pub kota_bharu_fetch_lock: Arc<Mutex<()>>,
+    pub kuala_terengganu_gtfs_cache: Arc<GtfsCache>,
+    pub kuala_terengganu_fetch_lock: Arc<Mutex<()>>,
+    pub ipoh_gtfs_cache: Arc<GtfsCache>,
+    pub ipoh_fetch_lock: Arc<Mutex<()>>,
+    pub seremban_a_gtfs_cache: Arc<GtfsCache>,
+    pub seremban_a_fetch_lock: Arc<Mutex<()>>,
+    pub seremban_b_gtfs_cache: Arc<GtfsCache>,
+    pub seremban_b_fetch_lock: Arc<Mutex<()>>,
+    pub melaka_gtfs_cache: Arc<GtfsCache>,
+    pub melaka_fetch_lock: Arc<Mutex<()>>,
+    pub johor_gtfs_cache: Arc<GtfsCache>,
+    pub johor_fetch_lock: Arc<Mutex<()>>,
+    pub kuching_gtfs_cache: Arc<GtfsCache>,
+    pub kuching_fetch_lock: Arc<Mutex<()>>,
+    pub bus_ttl_ms: i64,
+    pub stale_after_ms: i64,
+    pub stationary_window_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct IngestorStatus {
-    connected: bool,
-    reconnect_count: u64,
-    messages_processed: u64,
-    buses_written: u64,
-    decode_failures: u64,
-    redis_write_failures: u64,
-    last_message_unix_ms: Option<i64>,
-    last_error: Option<String>,
+pub struct IngestorStatus {
+    pub connected: bool,
+    pub reconnect_count: u64,
+    pub messages_processed: u64,
+    pub buses_written: u64,
+    pub decode_failures: u64,
+    pub redis_write_failures: u64,
+    pub last_message_unix_ms: Option<i64>,
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-struct GetAllMeta {
-    source: &'static str,
-    last_ingest_at_unix_ms: Option<i64>,
-    is_stale: bool,
-    active_bus_count: usize,
+pub struct GetAllMeta {
+    pub source: &'static str,
+    pub last_ingest_at_unix_ms: Option<i64>,
+    pub is_stale: bool,
+    pub active_bus_count: usize,
 }
 
 #[derive(Debug, Serialize)]
-struct GetAllResponse {
-    data: Vec<BusPosition>,
-    meta: GetAllMeta,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct RouteBusPositionResponse {
-    #[serde(flatten)]
-    bus: BusPosition,
-    resolved_stop_id: Option<String>,
-    resolved_stop_name: Option<String>,
-    resolved_stop_sequence: Option<u32>,
-    stop_resolution_source: Option<StopResolutionSource>,
+pub struct GetAllResponse {
+    pub data: Vec<BusPosition>,
+    pub meta: GetAllMeta,
 }
 
 #[derive(Debug, Serialize)]
-struct StopIncomingMeta {
-    source: &'static str,
-    generated_at_unix_ms: i64,
-    last_ingest_at_unix_ms: Option<i64>,
-    is_stale: bool,
-    active_bus_count: usize,
-    incoming_bus_count: usize,
-    has_incoming_buses: bool,
+pub struct StopIncomingMeta {
+    pub source: &'static str,
+    pub generated_at_unix_ms: i64,
+    pub last_ingest_at_unix_ms: Option<i64>,
+    pub is_stale: bool,
+    pub active_bus_count: usize,
+    pub incoming_bus_count: usize,
+    pub has_incoming_buses: bool,
 }
 
 #[derive(Debug, Serialize)]
-struct StopIncomingResponse {
-    stop_id: String,
-    stop_name: String,
-    stop_desc: String,
-    data: Vec<BusEta>,
-    meta: StopIncomingMeta,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct BusMotionState {
-    reference_lat: f64,
-    reference_lon: f64,
-    stationary_since_unix_ms: Option<i64>,
+pub struct StopIncomingResponse {
+    pub stop_id: String,
+    pub stop_name: String,
+    pub stop_desc: String,
+    pub data: Vec<BusEta>,
+    pub meta: StopIncomingMeta,
 }
 
 #[derive(Debug)]
-struct RedisBusSnapshot {
-    buses: Vec<BusPosition>,
-    motion_states: HashMap<String, BusMotionState>,
-    active_bus_count: usize,
-    last_ingest_at_unix_ms: Option<i64>,
+pub struct RedisBusSnapshot {
+    pub buses: Vec<BusPosition>,
+    pub motion_states: HashMap<String, BusMotionState>,
+    pub active_bus_count: usize,
+    pub last_ingest_at_unix_ms: Option<i64>,
 }
 
-#[derive(Debug)]
-struct GtfsContext {
-    routes: Vec<Route>,
-    trips_by_route: HashMap<String, Vec<Trip>>,
-    stop_times_by_trip: HashMap<String, Vec<StopTime>>,
-    stops_map: HashMap<String, Stop>,
-}
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-#[derive(Debug)]
-struct GtfsCache {
-    context: GtfsContext,
-    shapes_by_id: HashMap<String, Vec<ShapePoint>>,
-    route_stops_by_route: HashMap<String, RouteStopsResponse>,
-    routes_by_stop: HashMap<String, Vec<StopRouteSummary>>,
-}
-
-const SOCKET_URL: &str = "https://rapidbus-socketio-avl.prasarana.com.my";
-const REDIS_BUSES_LATEST_KEY: &str = "rapidbro:buses:latest";
-const REDIS_BUSES_LAST_SEEN_KEY: &str = "rapidbro:buses:last_seen";
-const REDIS_BUSES_MOTION_KEY: &str = "rapidbro:buses:motion";
-const REDIS_INGEST_LAST_KEY: &str = "rapidbro:ingestor:last_ingest_at";
+pub const REDIS_BUSES_LATEST_KEY: &str = "rapidbro:buses:latest";
+pub const REDIS_BUSES_LAST_SEEN_KEY: &str = "rapidbro:buses:last_seen";
+pub const REDIS_BUSES_MOTION_KEY: &str = "rapidbro:buses:motion";
+pub const REDIS_INGEST_LAST_KEY: &str = "rapidbro:ingestor:last_ingest_at";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1:6379/";
 const DEFAULT_BUS_TTL_SECONDS: i64 = 300;
 const DEFAULT_STALE_AFTER_SECONDS: i64 = 20;
 const DEFAULT_STATIONARY_WINDOW_SECONDS: i64 = 300;
-const MAX_DERIVED_STOP_DISTANCE_KM: f64 = 0.75;
-const STATIONARY_SPEED_THRESHOLD_KMH: f64 = 1.0;
-const STATIONARY_DISTANCE_THRESHOLD_KM: f64 = 0.03;
-const PANTAI_HILLPARK_PHASE_5_STOP_ID: &str = "1008485";
+pub const MAX_DERIVED_STOP_DISTANCE_KM: f64 = 0.75;
+pub const STATIONARY_SPEED_THRESHOLD_KMH: f64 = 1.0;
+pub const STATIONARY_DISTANCE_THRESHOLD_KM: f64 = 0.03;
 
-impl GtfsCache {
-    fn build() -> Result<Self, Box<dyn std::error::Error>> {
-        let context = GtfsContext {
-            routes: load_routes()?,
-            trips_by_route: load_trips()?,
-            stop_times_by_trip: load_stop_times()?,
-            stops_map: load_stops()?,
-        };
-        let shapes_by_id = load_shapes()?;
-        let mut route_stops_by_route: HashMap<String, RouteStopsResponse> = HashMap::new();
-
-        for route in &context.routes {
-            if let Ok(route_stops) = get_stops_by_route(
-                &route.route_id,
-                &context.routes,
-                &context.trips_by_route,
-                &context.stop_times_by_trip,
-                &context.stops_map,
-            ) {
-                route_stops_by_route.insert(route.route_id.clone(), route_stops);
-            }
-        }
-
-        let mut routes_by_stop: HashMap<String, Vec<StopRouteSummary>> = HashMap::new();
-        for route_stops in route_stops_by_route.values() {
-            let route_summary = StopRouteSummary {
-                route_id: route_stops.route_id.clone(),
-                route_short_name: route_stops.route_short_name.clone(),
-                route_long_name: route_stops.route_long_name.clone(),
-            };
-            let mut seen_stop_ids: HashSet<String> = HashSet::new();
-            for stop in &route_stops.stops {
-                if seen_stop_ids.insert(stop.stop_id.clone()) {
-                    routes_by_stop
-                        .entry(stop.stop_id.clone())
-                        .or_default()
-                        .push(route_summary.clone());
-                }
-            }
-        }
-
-        for route_summaries in routes_by_stop.values_mut() {
-            route_summaries.sort_by(|a, b| {
-                a.route_short_name
-                    .cmp(&b.route_short_name)
-                    .then(a.route_id.cmp(&b.route_id))
-            });
-        }
-
-        Ok(Self {
-            context,
-            shapes_by_id,
-            route_stops_by_route,
-            routes_by_stop,
-        })
-    }
-}
+// ── Entry point ───────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() {
-    let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| DEFAULT_REDIS_URL.to_string());
-    let bus_ttl_seconds = env::var("BUS_TTL_SECONDS")
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| DEFAULT_REDIS_URL.to_string());
+    let bus_ttl_seconds = std::env::var("BUS_TTL_SECONDS")
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(DEFAULT_BUS_TTL_SECONDS);
-    let stale_after_seconds = env::var("STALE_AFTER_SECONDS")
+    let stale_after_seconds = std::env::var("STALE_AFTER_SECONDS")
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(DEFAULT_STALE_AFTER_SECONDS);
-    let stationary_window_seconds = env::var("STATIONARY_WINDOW_SECONDS")
+    let stationary_window_seconds = std::env::var("STATIONARY_WINDOW_SECONDS")
         .ok()
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(DEFAULT_STATIONARY_WINDOW_SECONDS);
@@ -391,7 +205,6 @@ async fn main() {
         );
     });
 
-    // Fail fast if Redis is unavailable at startup.
     let mut redis_conn = redis_client
         .get_multiplexed_async_connection()
         .await
@@ -400,9 +213,76 @@ async fn main() {
         .query_async(&mut redis_conn)
         .await
         .unwrap_or_else(|error| panic!("Failed to ping Redis '{}': {}", redis_url, error));
+    let bus_data_root = StdPath::new(
+        &std::env::var("BUS_DATA_DIR").unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string()),
+    )
+    .join("bus_data");
+
+    let rapidkl_data_dir = bus_data_root.join("rapid-kl");
     let gtfs_cache = Arc::new(
-        GtfsCache::build()
-            .unwrap_or_else(|error| panic!("Failed to build GTFS cache at startup: {}", error)),
+        GtfsCache::build(&rapidkl_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build RapidKL GTFS cache: {}", error)),
+    );
+
+    let kangar_data_dir = bus_data_root.join("busmy-kangar");
+    let kangar_gtfs_cache = Arc::new(
+        GtfsCache::build(&kangar_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Kangar GTFS cache: {}", error)),
+    );
+
+    let alor_setar_data_dir = bus_data_root.join("busmy-alor-setar");
+    let alor_setar_gtfs_cache = Arc::new(
+        GtfsCache::build(&alor_setar_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Alor Setar GTFS cache: {}", error)),
+    );
+
+    let kota_bharu_data_dir = bus_data_root.join("busmy-kota-bharu");
+    let kota_bharu_gtfs_cache = Arc::new(
+        GtfsCache::build(&kota_bharu_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Kota Bharu GTFS cache: {}", error)),
+    );
+
+    let kuala_terengganu_data_dir = bus_data_root.join("busmy-kuala-terengganu");
+    let kuala_terengganu_gtfs_cache = Arc::new(
+        GtfsCache::build(&kuala_terengganu_data_dir).unwrap_or_else(|error| {
+            panic!("Failed to build Kuala Terengganu GTFS cache: {}", error)
+        }),
+    );
+
+    let ipoh_data_dir = bus_data_root.join("busmy-ipoh");
+    let ipoh_gtfs_cache = Arc::new(
+        GtfsCache::build(&ipoh_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Ipoh GTFS cache: {}", error)),
+    );
+
+    let seremban_a_data_dir = bus_data_root.join("busmy-seremban-a");
+    let seremban_a_gtfs_cache = Arc::new(
+        GtfsCache::build(&seremban_a_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Seremban A GTFS cache: {}", error)),
+    );
+
+    let seremban_b_data_dir = bus_data_root.join("busmy-seremban-b");
+    let seremban_b_gtfs_cache = Arc::new(
+        GtfsCache::build(&seremban_b_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Seremban B GTFS cache: {}", error)),
+    );
+
+    let melaka_data_dir = bus_data_root.join("busmy-melaka");
+    let melaka_gtfs_cache = Arc::new(
+        GtfsCache::build(&melaka_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Melaka GTFS cache: {}", error)),
+    );
+
+    let johor_data_dir = bus_data_root.join("busmy-johor-bharu");
+    let johor_gtfs_cache = Arc::new(
+        GtfsCache::build(&johor_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Johor GTFS cache: {}", error)),
+    );
+
+    let kuching_data_dir = bus_data_root.join("busmy-kuching");
+    let kuching_gtfs_cache = Arc::new(
+        GtfsCache::build(&kuching_data_dir)
+            .unwrap_or_else(|error| panic!("Failed to build Kuching GTFS cache: {}", error)),
     );
 
     let app_state = AppState {
@@ -418,6 +298,26 @@ async fn main() {
             last_error: None,
         })),
         gtfs_cache,
+        kangar_gtfs_cache,
+        kangar_fetch_lock: Arc::new(Mutex::new(())),
+        alor_setar_gtfs_cache,
+        alor_setar_fetch_lock: Arc::new(Mutex::new(())),
+        kota_bharu_gtfs_cache,
+        kota_bharu_fetch_lock: Arc::new(Mutex::new(())),
+        kuala_terengganu_gtfs_cache,
+        kuala_terengganu_fetch_lock: Arc::new(Mutex::new(())),
+        ipoh_gtfs_cache,
+        ipoh_fetch_lock: Arc::new(Mutex::new(())),
+        seremban_a_gtfs_cache,
+        seremban_a_fetch_lock: Arc::new(Mutex::new(())),
+        seremban_b_gtfs_cache,
+        seremban_b_fetch_lock: Arc::new(Mutex::new(())),
+        melaka_gtfs_cache,
+        melaka_fetch_lock: Arc::new(Mutex::new(())),
+        johor_gtfs_cache,
+        johor_fetch_lock: Arc::new(Mutex::new(())),
+        kuching_gtfs_cache,
+        kuching_fetch_lock: Arc::new(Mutex::new(())),
         bus_ttl_ms: bus_ttl_seconds * 1_000,
         stale_after_ms: stale_after_seconds * 1_000,
         stationary_window_ms: stationary_window_seconds * 1_000,
@@ -444,6 +344,272 @@ async fn main() {
         .route("/route/{route_id}/stops", get(get_route_stops))
         .route("/route/{route_id}/shape", get(get_route_shape))
         .route("/stops/nearest", get(get_nearest_stop))
+        // ── Kangar routes ────────────────────────────────────────────────
+        .route("/kangar/get-all", get(busmy_kangar::kangar_fetch_all_buses))
+        .route(
+            "/kangar/route/{route_id}/eta/{stop_id}",
+            get(busmy_kangar::kangar_get_route_eta),
+        )
+        .route("/kangar/stops/{stop_id}/eta", get(busmy_kangar::kangar_get_stop_eta))
+        .route(
+            "/kangar/stops/{stop_id}/routes",
+            get(busmy_kangar::kangar_get_stop_routes),
+        )
+        .route(
+            "/kangar/route/{route_id}/stops",
+            get(busmy_kangar::kangar_get_route_stops),
+        )
+        .route(
+            "/kangar/route/{route_id}/shape",
+            get(busmy_kangar::kangar_get_route_shape),
+        )
+        .route("/kangar/stops/nearest", get(busmy_kangar::kangar_get_nearest_stop))
+        // ── Alor Setar routes ────────────────────────────────────────────
+        .route(
+            "/alor-setar/get-all",
+            get(busmy_alor_setar::alor_setar_fetch_all_buses),
+        )
+        .route(
+            "/alor-setar/route/{route_id}/eta/{stop_id}",
+            get(busmy_alor_setar::alor_setar_get_route_eta),
+        )
+        .route(
+            "/alor-setar/stops/{stop_id}/eta",
+            get(busmy_alor_setar::alor_setar_get_stop_eta),
+        )
+        .route(
+            "/alor-setar/stops/{stop_id}/routes",
+            get(busmy_alor_setar::alor_setar_get_stop_routes),
+        )
+        .route(
+            "/alor-setar/route/{route_id}/stops",
+            get(busmy_alor_setar::alor_setar_get_route_stops),
+        )
+        .route(
+            "/alor-setar/route/{route_id}/shape",
+            get(busmy_alor_setar::alor_setar_get_route_shape),
+        )
+        .route(
+            "/alor-setar/stops/nearest",
+            get(busmy_alor_setar::alor_setar_get_nearest_stop),
+        )
+        // ── Kota Bharu routes ────────────────────────────────────────────
+        .route(
+            "/kota-bharu/get-all",
+            get(busmy_kota_bharu::kota_bharu_fetch_all_buses),
+        )
+        .route(
+            "/kota-bharu/route/{route_id}/eta/{stop_id}",
+            get(busmy_kota_bharu::kota_bharu_get_route_eta),
+        )
+        .route(
+            "/kota-bharu/stops/{stop_id}/eta",
+            get(busmy_kota_bharu::kota_bharu_get_stop_eta),
+        )
+        .route(
+            "/kota-bharu/stops/{stop_id}/routes",
+            get(busmy_kota_bharu::kota_bharu_get_stop_routes),
+        )
+        .route(
+            "/kota-bharu/route/{route_id}/stops",
+            get(busmy_kota_bharu::kota_bharu_get_route_stops),
+        )
+        .route(
+            "/kota-bharu/route/{route_id}/shape",
+            get(busmy_kota_bharu::kota_bharu_get_route_shape),
+        )
+        .route(
+            "/kota-bharu/stops/nearest",
+            get(busmy_kota_bharu::kota_bharu_get_nearest_stop),
+        )
+        // ── Kuala Terengganu routes ──────────────────────────────────────
+        .route(
+            "/kuala-terengganu/get-all",
+            get(busmy_kuala_terengganu::kuala_terengganu_fetch_all_buses),
+        )
+        .route(
+            "/kuala-terengganu/route/{route_id}/eta/{stop_id}",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_route_eta),
+        )
+        .route(
+            "/kuala-terengganu/stops/{stop_id}/eta",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_stop_eta),
+        )
+        .route(
+            "/kuala-terengganu/stops/{stop_id}/routes",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_stop_routes),
+        )
+        .route(
+            "/kuala-terengganu/route/{route_id}/stops",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_route_stops),
+        )
+        .route(
+            "/kuala-terengganu/route/{route_id}/shape",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_route_shape),
+        )
+        .route(
+            "/kuala-terengganu/stops/nearest",
+            get(busmy_kuala_terengganu::kuala_terengganu_get_nearest_stop),
+        )
+        // ── Ipoh routes ──────────────────────────────────────────────────
+        .route("/ipoh/get-all", get(busmy_ipoh::ipoh_fetch_all_buses))
+        .route(
+            "/ipoh/route/{route_id}/eta/{stop_id}",
+            get(busmy_ipoh::ipoh_get_route_eta),
+        )
+        .route(
+            "/ipoh/stops/{stop_id}/eta",
+            get(busmy_ipoh::ipoh_get_stop_eta),
+        )
+        .route(
+            "/ipoh/stops/{stop_id}/routes",
+            get(busmy_ipoh::ipoh_get_stop_routes),
+        )
+        .route(
+            "/ipoh/route/{route_id}/stops",
+            get(busmy_ipoh::ipoh_get_route_stops),
+        )
+        .route(
+            "/ipoh/route/{route_id}/shape",
+            get(busmy_ipoh::ipoh_get_route_shape),
+        )
+        .route("/ipoh/stops/nearest", get(busmy_ipoh::ipoh_get_nearest_stop))
+        // ── Seremban A routes ────────────────────────────────────────────
+        .route(
+            "/seremban-a/get-all",
+            get(busmy_seremban::seremban_a_fetch_all_buses),
+        )
+        .route(
+            "/seremban-a/route/{route_id}/eta/{stop_id}",
+            get(busmy_seremban::seremban_a_get_route_eta),
+        )
+        .route(
+            "/seremban-a/stops/{stop_id}/eta",
+            get(busmy_seremban::seremban_a_get_stop_eta),
+        )
+        .route(
+            "/seremban-a/stops/{stop_id}/routes",
+            get(busmy_seremban::seremban_a_get_stop_routes),
+        )
+        .route(
+            "/seremban-a/route/{route_id}/stops",
+            get(busmy_seremban::seremban_a_get_route_stops),
+        )
+        .route(
+            "/seremban-a/route/{route_id}/shape",
+            get(busmy_seremban::seremban_a_get_route_shape),
+        )
+        .route(
+            "/seremban-a/stops/nearest",
+            get(busmy_seremban::seremban_a_get_nearest_stop),
+        )
+        // ── Seremban B routes ────────────────────────────────────────────
+        .route(
+            "/seremban-b/get-all",
+            get(busmy_seremban::seremban_b_fetch_all_buses),
+        )
+        .route(
+            "/seremban-b/route/{route_id}/eta/{stop_id}",
+            get(busmy_seremban::seremban_b_get_route_eta),
+        )
+        .route(
+            "/seremban-b/stops/{stop_id}/eta",
+            get(busmy_seremban::seremban_b_get_stop_eta),
+        )
+        .route(
+            "/seremban-b/stops/{stop_id}/routes",
+            get(busmy_seremban::seremban_b_get_stop_routes),
+        )
+        .route(
+            "/seremban-b/route/{route_id}/stops",
+            get(busmy_seremban::seremban_b_get_route_stops),
+        )
+        .route(
+            "/seremban-b/route/{route_id}/shape",
+            get(busmy_seremban::seremban_b_get_route_shape),
+        )
+        .route(
+            "/seremban-b/stops/nearest",
+            get(busmy_seremban::seremban_b_get_nearest_stop),
+        )
+        // ── Melaka routes ────────────────────────────────────────────────
+        .route("/melaka/get-all", get(busmy_melaka::melaka_fetch_all_buses))
+        .route(
+            "/melaka/route/{route_id}/eta/{stop_id}",
+            get(busmy_melaka::melaka_get_route_eta),
+        )
+        .route(
+            "/melaka/stops/{stop_id}/eta",
+            get(busmy_melaka::melaka_get_stop_eta),
+        )
+        .route(
+            "/melaka/stops/{stop_id}/routes",
+            get(busmy_melaka::melaka_get_stop_routes),
+        )
+        .route(
+            "/melaka/route/{route_id}/stops",
+            get(busmy_melaka::melaka_get_route_stops),
+        )
+        .route(
+            "/melaka/route/{route_id}/shape",
+            get(busmy_melaka::melaka_get_route_shape),
+        )
+        .route(
+            "/melaka/stops/nearest",
+            get(busmy_melaka::melaka_get_nearest_stop),
+        )
+        // ── Johor routes ─────────────────────────────────────────────────
+        .route("/johor/get-all", get(busmy_johor_bharu::johor_fetch_all_buses))
+        .route(
+            "/johor/route/{route_id}/eta/{stop_id}",
+            get(busmy_johor_bharu::johor_get_route_eta),
+        )
+        .route(
+            "/johor/stops/{stop_id}/eta",
+            get(busmy_johor_bharu::johor_get_stop_eta),
+        )
+        .route(
+            "/johor/stops/{stop_id}/routes",
+            get(busmy_johor_bharu::johor_get_stop_routes),
+        )
+        .route(
+            "/johor/route/{route_id}/stops",
+            get(busmy_johor_bharu::johor_get_route_stops),
+        )
+        .route(
+            "/johor/route/{route_id}/shape",
+            get(busmy_johor_bharu::johor_get_route_shape),
+        )
+        .route(
+            "/johor/stops/nearest",
+            get(busmy_johor_bharu::johor_get_nearest_stop),
+        )
+        // ── Kuching routes ───────────────────────────────────────────────
+        .route("/kuching/get-all", get(busmy_kuching::kuching_fetch_all_buses))
+        .route(
+            "/kuching/route/{route_id}/eta/{stop_id}",
+            get(busmy_kuching::kuching_get_route_eta),
+        )
+        .route(
+            "/kuching/stops/{stop_id}/eta",
+            get(busmy_kuching::kuching_get_stop_eta),
+        )
+        .route(
+            "/kuching/stops/{stop_id}/routes",
+            get(busmy_kuching::kuching_get_stop_routes),
+        )
+        .route(
+            "/kuching/route/{route_id}/stops",
+            get(busmy_kuching::kuching_get_route_stops),
+        )
+        .route(
+            "/kuching/route/{route_id}/shape",
+            get(busmy_kuching::kuching_get_route_shape),
+        )
+        .route(
+            "/kuching/stops/nearest",
+            get(busmy_kuching::kuching_get_nearest_stop),
+        )
         .layer(cors)
         .with_state(app_state);
 
@@ -452,6 +618,8 @@ async fn main() {
     println!("Server is running on http://localhost:3030");
     axum::serve(listener, app).await.unwrap();
 }
+
+// ── Generic HTTP handlers ─────────────────────────────────────────────────────
 
 async fn fetch_all_buses(
     State(state): State<AppState>,
@@ -478,570 +646,10 @@ async fn fetch_all_buses(
     }))
 }
 
-async fn load_active_bus_snapshot(
-    state: &AppState,
-) -> Result<RedisBusSnapshot, (StatusCode, Json<ErrorResponse>)> {
-    let now_ms = now_unix_ms();
-    let cutoff_ms = now_ms - state.bus_ttl_ms;
-    let mut redis_conn = state
-        .redis_client
-        .get_multiplexed_async_connection()
-        .await
-        .map_err(internal_error)?;
-
-    let stale_bus_ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
-        .arg(REDIS_BUSES_LAST_SEEN_KEY)
-        .arg("-inf")
-        .arg(cutoff_ms)
-        .query_async(&mut redis_conn)
-        .await
-        .map_err(internal_error)?;
-
-    if !stale_bus_ids.is_empty() {
-        let mut delete_pipe = redis::pipe();
-        delete_pipe
-            .cmd("HDEL")
-            .arg(REDIS_BUSES_LATEST_KEY)
-            .arg(&stale_bus_ids)
-            .ignore();
-        delete_pipe
-            .cmd("HDEL")
-            .arg(REDIS_BUSES_MOTION_KEY)
-            .arg(&stale_bus_ids)
-            .ignore();
-        delete_pipe
-            .cmd("ZREMRANGEBYSCORE")
-            .arg(REDIS_BUSES_LAST_SEEN_KEY)
-            .arg("-inf")
-            .arg(cutoff_ms)
-            .ignore();
-        delete_pipe
-            .query_async::<()>(&mut redis_conn)
-            .await
-            .map_err(internal_error)?;
-    }
-
-    let active_bus_ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
-        .arg(REDIS_BUSES_LAST_SEEN_KEY)
-        .arg(cutoff_ms + 1)
-        .arg("+inf")
-        .query_async(&mut redis_conn)
-        .await
-        .map_err(internal_error)?;
-
-    let buses: Vec<BusPosition> = if active_bus_ids.is_empty() {
-        Vec::new()
-    } else {
-        let raw_buses: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(REDIS_BUSES_LATEST_KEY)
-            .arg(&active_bus_ids)
-            .query_async(&mut redis_conn)
-            .await
-            .map_err(internal_error)?;
-
-        raw_buses
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| serde_json::from_str::<BusPosition>(&entry).ok())
-            .collect()
-    };
-
-    let motion_states: HashMap<String, BusMotionState> = if active_bus_ids.is_empty() {
-        HashMap::new()
-    } else {
-        let raw_states: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(REDIS_BUSES_MOTION_KEY)
-            .arg(&active_bus_ids)
-            .query_async(&mut redis_conn)
-            .await
-            .map_err(internal_error)?;
-
-        active_bus_ids
-            .iter()
-            .cloned()
-            .zip(raw_states.into_iter())
-            .filter_map(|(bus_no, raw_state)| {
-                raw_state.and_then(|value| {
-                    serde_json::from_str::<BusMotionState>(&value)
-                        .ok()
-                        .map(|state| (bus_no, state))
-                })
-            })
-            .collect()
-    };
-
-    let last_ingest_at_unix_ms: Option<i64> = redis::cmd("GET")
-        .arg(REDIS_INGEST_LAST_KEY)
-        .query_async(&mut redis_conn)
-        .await
-        .unwrap_or(None);
-
-    Ok(RedisBusSnapshot {
-        buses,
-        motion_states,
-        active_bus_count: active_bus_ids.len(),
-        last_ingest_at_unix_ms,
-    })
-}
-
 async fn get_ingestor_status(State(state): State<AppState>) -> Json<IngestorStatus> {
     Json(state.ingestor_status.read().await.clone())
 }
 
-async fn run_bus_ingestor(state: AppState) {
-    let mut backoff_seconds: u64 = 1;
-
-    loop {
-        let redis_conn = match state.redis_client.get_multiplexed_async_connection().await {
-            Ok(connection) => connection,
-            Err(error) => {
-                record_ingestor_error(
-                    &state,
-                    format!("Redis connection failed before socket connect: {}", error),
-                    true,
-                )
-                .await;
-                tokio::time::sleep(Duration::from_secs(backoff_seconds)).await;
-                backoff_seconds = (backoff_seconds * 2).min(30);
-                continue;
-            }
-        };
-
-        let disconnect_notify = Arc::new(Notify::new());
-        let on_any_state = state.clone();
-        let on_any_conn = redis_conn.clone();
-
-        let on_any = move |_event: rust_socketio::Event,
-                           payload: Payload,
-                           _socket: rust_socketio::asynchronous::Client| {
-            let state = on_any_state.clone();
-            let mut redis_conn = on_any_conn.clone();
-            async move {
-                let now_ms = now_unix_ms();
-                let (buses, decode_failures) = parse_bus_positions_from_payload(payload);
-
-                {
-                    let mut status = state.ingestor_status.write().await;
-                    status.messages_processed += 1;
-                    status.last_message_unix_ms = Some(now_ms);
-                    status.decode_failures += decode_failures;
-                }
-
-                if buses.is_empty() {
-                    return;
-                }
-
-                match write_buses_to_redis(&mut redis_conn, &buses, now_ms).await {
-                    Ok(written_count) => {
-                        let mut status = state.ingestor_status.write().await;
-                        status.buses_written += written_count as u64;
-                        status.last_error = None;
-                    }
-                    Err(error) => {
-                        let mut status = state.ingestor_status.write().await;
-                        status.redis_write_failures += 1;
-                        status.last_error = Some(format!("Redis write failed: {}", error));
-                    }
-                }
-            }
-            .boxed()
-        };
-
-        let disconnect_state = state.clone();
-        let disconnect_signal = disconnect_notify.clone();
-        let disconnect_state_for_error = state.clone();
-        let disconnect_signal_for_error = disconnect_notify.clone();
-
-        let socket = ClientBuilder::new(SOCKET_URL)
-            .transport_type(TransportType::Websocket)
-            .on_any(on_any)
-            .on("disconnect", move |_, _| {
-                let state = disconnect_state.clone();
-                let notify = disconnect_signal.clone();
-                async move {
-                    {
-                        let mut status = state.ingestor_status.write().await;
-                        status.connected = false;
-                        status.last_error = Some("Socket disconnected".to_string());
-                        status.reconnect_count += 1;
-                    }
-                    notify.notify_one();
-                }
-                .boxed()
-            })
-            .on("error", move |_, _| {
-                let state = disconnect_state_for_error.clone();
-                let notify = disconnect_signal_for_error.clone();
-                async move {
-                    {
-                        let mut status = state.ingestor_status.write().await;
-                        status.connected = false;
-                        status.last_error = Some("Socket error event".to_string());
-                        status.reconnect_count += 1;
-                    }
-                    notify.notify_one();
-                }
-                .boxed()
-            })
-            .connect()
-            .await;
-
-        match socket {
-            Ok(socket) => {
-                let payload = json!({
-                    "sid": "",
-                    "uid": "",
-                    "provider": "RKL",
-                    "route": ""
-                });
-                if let Err(error) = socket.emit("onFts-reload", payload).await {
-                    record_ingestor_error(
-                        &state,
-                        format!("Socket subscribe emit failed: {}", error),
-                        true,
-                    )
-                    .await;
-                    tokio::time::sleep(Duration::from_secs(backoff_seconds)).await;
-                    backoff_seconds = (backoff_seconds * 2).min(30);
-                    continue;
-                }
-
-                {
-                    let mut status = state.ingestor_status.write().await;
-                    status.connected = true;
-                    status.last_error = None;
-                }
-
-                backoff_seconds = 1;
-                let mut reload_interval = tokio::time::interval(Duration::from_secs(20));
-                reload_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-                // Consume immediate first tick so the first periodic reload happens after the interval.
-                reload_interval.tick().await;
-
-                loop {
-                    tokio::select! {
-                        _ = disconnect_notify.notified() => {
-                            break;
-                        }
-                        _ = reload_interval.tick() => {
-                            let payload = json!({
-                                "sid": "",
-                                "uid": "",
-                                "provider": "RKL",
-                                "route": ""
-                            });
-
-                            if let Err(error) = socket.emit("onFts-reload", payload).await {
-                                record_ingestor_error(
-                                    &state,
-                                    format!("Periodic socket reload emit failed: {}", error),
-                                    true,
-                                )
-                                .await;
-                                break;
-                            }
-                        }
-                    }
-                }
-                drop(socket);
-            }
-            Err(error) => {
-                record_ingestor_error(&state, format!("Socket connection failed: {}", error), true)
-                    .await;
-                tokio::time::sleep(Duration::from_secs(backoff_seconds)).await;
-                backoff_seconds = (backoff_seconds * 2).min(30);
-            }
-        }
-    }
-}
-
-async fn write_buses_to_redis(
-    redis_conn: &mut redis::aio::MultiplexedConnection,
-    buses: &[BusPosition],
-    now_ms: i64,
-) -> Result<usize, String> {
-    let mut serialized_entries: Vec<(String, String)> = Vec::new();
-    let valid_buses: HashMap<String, &BusPosition> = buses
-        .iter()
-        .filter(|bus| !bus.bus_no.is_empty())
-        .map(|bus| (bus.bus_no.clone(), bus))
-        .collect();
-    let bus_ids: Vec<String> = valid_buses.keys().cloned().collect();
-
-    let previous_motion_states: HashMap<String, BusMotionState> = if bus_ids.is_empty() {
-        HashMap::new()
-    } else {
-        let raw_states: Vec<Option<String>> = redis::cmd("HMGET")
-            .arg(REDIS_BUSES_MOTION_KEY)
-            .arg(&bus_ids)
-            .query_async(redis_conn)
-            .await
-            .map_err(|error| error.to_string())?;
-
-        bus_ids
-            .iter()
-            .cloned()
-            .zip(raw_states.into_iter())
-            .filter_map(|(bus_no, raw_state)| {
-                raw_state.and_then(|value| {
-                    serde_json::from_str::<BusMotionState>(&value)
-                        .ok()
-                        .map(|state| (bus_no, state))
-                })
-            })
-            .collect()
-    };
-
-    for bus in buses {
-        if bus.bus_no.is_empty() {
-            continue;
-        }
-
-        if let Ok(serialized_bus) = serde_json::to_string(bus) {
-            serialized_entries.push((bus.bus_no.clone(), serialized_bus));
-        }
-    }
-
-    if serialized_entries.is_empty() {
-        return Ok(0);
-    }
-
-    let mut pipe = redis::pipe();
-    for (bus_no, bus_json) in &serialized_entries {
-        let Some(bus) = valid_buses.get(bus_no) else {
-            continue;
-        };
-        let motion_state = update_bus_motion_state(previous_motion_states.get(bus_no), bus, now_ms);
-
-        pipe.cmd("HSET")
-            .arg(REDIS_BUSES_LATEST_KEY)
-            .arg(bus_no)
-            .arg(bus_json)
-            .ignore();
-        pipe.cmd("HSET")
-            .arg(REDIS_BUSES_MOTION_KEY)
-            .arg(bus_no)
-            .arg(serde_json::to_string(&motion_state).map_err(|error| error.to_string())?)
-            .ignore();
-        pipe.cmd("ZADD")
-            .arg(REDIS_BUSES_LAST_SEEN_KEY)
-            .arg(now_ms)
-            .arg(bus_no)
-            .ignore();
-    }
-
-    pipe.cmd("SET")
-        .arg(REDIS_INGEST_LAST_KEY)
-        .arg(now_ms)
-        .ignore();
-
-    pipe.query_async::<()>(redis_conn)
-        .await
-        .map_err(|error| error.to_string())?;
-
-    Ok(serialized_entries.len())
-}
-
-fn parse_bus_positions_from_payload(payload: Payload) -> (Vec<BusPosition>, u64) {
-    let mut buses = Vec::new();
-    let mut decode_failures = 0;
-
-    if let Payload::Text(values) = payload {
-        for value in values {
-            let Some(encoded_str) = value.as_str() else {
-                continue;
-            };
-
-            let Some(decoded) = decode_bus_data(encoded_str) else {
-                decode_failures += 1;
-                continue;
-            };
-
-            match parse_bus_positions_from_json(&decoded) {
-                Some(mut parsed_buses) => buses.append(&mut parsed_buses),
-                None => decode_failures += 1,
-            }
-        }
-    }
-
-    (buses, decode_failures)
-}
-
-fn parse_bus_positions_from_json(decoded: &str) -> Option<Vec<BusPosition>> {
-    if let Ok(single_bus) = serde_json::from_str::<BusPosition>(decoded) {
-        return Some(vec![single_bus]);
-    }
-
-    if let Ok(bus_list) = serde_json::from_str::<Vec<BusPosition>>(decoded) {
-        return Some(bus_list);
-    }
-
-    let value = serde_json::from_str::<serde_json::Value>(decoded).ok()?;
-    if let serde_json::Value::Array(entries) = value {
-        let buses: Vec<BusPosition> = entries
-            .into_iter()
-            .filter_map(|entry| serde_json::from_value::<BusPosition>(entry).ok())
-            .collect();
-
-        if buses.is_empty() {
-            None
-        } else {
-            Some(buses)
-        }
-    } else {
-        None
-    }
-}
-
-async fn record_ingestor_error(state: &AppState, message: String, count_reconnect: bool) {
-    let mut status = state.ingestor_status.write().await;
-    status.connected = false;
-    status.last_error = Some(message);
-    if count_reconnect {
-        status.reconnect_count += 1;
-    }
-}
-
-fn internal_error(error: impl std::fmt::Display) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorResponse {
-            error: format!("Internal server error: {}", error),
-        }),
-    )
-}
-
-fn is_t789_route(route: &str) -> bool {
-    normalize_route_code(route) == "T789"
-}
-
-fn is_bus_on_route(bus_route: &str, route_id: &str) -> bool {
-    let bus_base = normalize_route_code(bus_route);
-    let route_base = normalize_route_code(route_id);
-    !bus_base.is_empty() && bus_base == route_base
-}
-
-fn normalize_route_code(route: &str) -> String {
-    route
-        .trim()
-        .to_uppercase()
-        .trim_end_matches('0')
-        .to_string()
-}
-
-fn now_unix_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or(0)
-}
-
-// Get buses for route T789 specifically from Redis snapshot
-async fn get_route_t789(
-    State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
-    let snapshot = load_active_bus_snapshot(&state).await?;
-    let visible_buses = filter_non_stationary_buses(&snapshot, state.stationary_window_ms);
-    let route_stops = get_route_stops_from_cache("T7890", state.gtfs_cache.as_ref())
-        .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
-    let t789_buses: Vec<RouteBusPositionResponse> = visible_buses
-        .into_iter()
-        .filter(|bus| is_t789_route(&bus.route))
-        .map(|bus| {
-            let resolved_stop = resolve_current_stop(&bus, &route_stops);
-            RouteBusPositionResponse {
-                resolved_stop_id: resolved_stop.as_ref().map(|stop| stop.stop_id.clone()),
-                resolved_stop_name: resolved_stop.as_ref().map(|stop| stop.stop_name.clone()),
-                resolved_stop_sequence: resolved_stop.as_ref().map(|stop| stop.sequence),
-                stop_resolution_source: resolved_stop.map(|stop| stop.source),
-                bus,
-            }
-        })
-        .collect();
-
-    println!(
-        "Calling get_route_t789 via Redis: {} active buses",
-        t789_buses.len()
-    );
-
-    if t789_buses.len() == 1 {
-        let value = serde_json::to_value(&t789_buses[0]).unwrap_or_else(|_| json!({}));
-        Ok(Json(value))
-    } else {
-        let value = serde_json::to_value(&t789_buses).unwrap_or_else(|_| json!([]));
-        Ok(Json(value))
-    }
-}
-
-// Calculate ETA for T789 buses from Redis snapshot to reach stop 1000838 (KL1397 FLAT PKNS KERINCHI/KL GATEWAY)
-async fn get_t789_eta(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<BusEta>>, (StatusCode, Json<ErrorResponse>)> {
-    const TARGET_STOP_ID: &str = "1000838";
-    let eta_results = calculate_route_eta(&state, "T7890", TARGET_STOP_ID).await?;
-    println!(
-        "Calling get_t789_eta: found {} buses with ETA",
-        eta_results.len()
-    );
-    Ok(Json(eta_results))
-}
-
-// Calculate ETA for all incoming buses to Pantai Hillpark Phase 5 (stop 1008485).
-async fn get_pantai_hillpark_phase_5_eta(
-    State(state): State<AppState>,
-) -> Result<Json<StopIncomingResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let snapshot = load_active_bus_snapshot(&state).await?;
-    let stop = state
-        .gtfs_cache
-        .context
-        .stops_map
-        .get(PANTAI_HILLPARK_PHASE_5_STOP_ID)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: format!(
-                        "Stop '{}' not found in GTFS data",
-                        PANTAI_HILLPARK_PHASE_5_STOP_ID
-                    ),
-                }),
-            )
-        })?;
-    let eta_results = calculate_stop_eta_from_snapshot(
-        &snapshot,
-        state.gtfs_cache.as_ref(),
-        PANTAI_HILLPARK_PHASE_5_STOP_ID,
-        state.stationary_window_ms,
-    );
-    let now_ms = now_unix_ms();
-    let is_stale = match snapshot.last_ingest_at_unix_ms {
-        Some(last_ingest_ms) => now_ms - last_ingest_ms > state.stale_after_ms,
-        None => true,
-    };
-
-    println!(
-        "Calling get_pantai_hillpark_phase_5_eta: {} incoming buses",
-        eta_results.len()
-    );
-
-    Ok(Json(StopIncomingResponse {
-        stop_id: stop.stop_id.clone(),
-        stop_name: stop.stop_name.clone(),
-        stop_desc: stop.stop_desc.clone(),
-        meta: StopIncomingMeta {
-            source: "redis",
-            generated_at_unix_ms: now_ms,
-            last_ingest_at_unix_ms: snapshot.last_ingest_at_unix_ms,
-            is_stale,
-            active_bus_count: snapshot.active_bus_count,
-            incoming_bus_count: eta_results.len(),
-            has_incoming_buses: !eta_results.is_empty(),
-        },
-        data: eta_results,
-    }))
-}
-
-// Calculate ETA for buses in route/{route_id} to reach stop/{stop_id}, based on Redis snapshot.
 async fn get_route_eta(
     Path((route_id, stop_id)): Path<(String, String)>,
     State(state): State<AppState>,
@@ -1056,19 +664,17 @@ async fn get_route_eta(
     Ok(Json(eta_results))
 }
 
-// Calculate ETA for all routes incoming to /stops/{stop_id}
 async fn get_stop_eta(
     Path(stop_id): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<BusEta>>, (StatusCode, Json<ErrorResponse>)> {
     let snapshot = load_active_bus_snapshot(&state).await?;
-    let all_eta_results =
-        calculate_stop_eta_from_snapshot(
-            &snapshot,
-            state.gtfs_cache.as_ref(),
-            &stop_id,
-            state.stationary_window_ms,
-        );
+    let all_eta_results = calculate_stop_eta_from_snapshot(
+        &snapshot,
+        state.gtfs_cache.as_ref(),
+        &stop_id,
+        state.stationary_window_ms,
+    );
 
     println!(
         "Calling get_stop_eta for stop_id={}: {} incoming buses",
@@ -1094,7 +700,220 @@ async fn get_stop_routes(
     Ok(Json(StopRoutesResponse { stop_id, routes }))
 }
 
-fn calculate_stop_eta_from_snapshot(
+async fn get_route_stops(
+    Path(route_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<RouteStopsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match get_route_stops_from_cache(&route_id, state.gtfs_cache.as_ref()) {
+        Ok(response) => {
+            println!("Calling get_route_stops for route_id={}", route_id);
+            Ok(Json(response))
+        }
+        Err((status, message)) => Err((status, Json(ErrorResponse { error: message }))),
+    }
+}
+
+async fn get_route_shape(
+    Path(route_id): Path<String>,
+    Query(query): Query<RouteShapeQuery>,
+    State(state): State<AppState>,
+) -> Result<Json<RouteShapeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match get_shape_by_route(
+        &route_id,
+        query.stop_id.as_deref(),
+        &state.gtfs_cache.context.routes,
+        &state.gtfs_cache.context.trips_by_route,
+        &state.gtfs_cache.context.stop_times_by_trip,
+        &state.gtfs_cache.shapes_by_id,
+    ) {
+        Ok(response) => Ok(Json(response)),
+        Err((status, message)) => Err((status, Json(ErrorResponse { error: message }))),
+    }
+}
+
+async fn get_nearest_stop(
+    Query(query): Query<NearestStopQuery>,
+    State(state): State<AppState>,
+) -> Result<Json<NearestStopResponse>, (StatusCode, Json<ErrorResponse>)> {
+    if !(-90.0..=90.0).contains(&query.lat) || !(-180.0..=180.0).contains(&query.lon) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Invalid latitude/longitude values".to_string(),
+            }),
+        ));
+    }
+
+    let nearest_stop = state
+        .gtfs_cache
+        .context
+        .stops_map
+        .values()
+        .map(|stop| {
+            let distance_km =
+                haversine_distance(query.lat, query.lon, stop.stop_lat, stop.stop_lon);
+            (stop, distance_km)
+        })
+        .min_by(|(_, left_distance), (_, right_distance)| {
+            left_distance
+                .partial_cmp(right_distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "No stops available".to_string(),
+                }),
+            )
+        })?;
+
+    let (stop, distance_km) = nearest_stop;
+    let response = NearestStopResponse {
+        stop_id: stop.stop_id.clone(),
+        stop_name: stop.stop_name.clone(),
+        stop_desc: stop.stop_desc.clone(),
+        stop_lat: stop.stop_lat,
+        stop_lon: stop.stop_lon,
+        distance_km: (distance_km * 1000.0).round() / 1000.0,
+        distance_meters: (distance_km * 1000.0 * 10.0).round() / 10.0,
+    };
+
+    println!(
+        "Calling get_nearest_stop for lat={}, lon={} -> stop_id={}",
+        query.lat, query.lon, response.stop_id
+    );
+    Ok(Json(response))
+}
+
+// ── Redis snapshot loading ────────────────────────────────────────────────────
+
+pub async fn load_active_bus_snapshot(
+    state: &AppState,
+) -> Result<RedisBusSnapshot, (StatusCode, Json<ErrorResponse>)> {
+    load_active_bus_snapshot_with_keys(
+        state,
+        REDIS_BUSES_LATEST_KEY,
+        REDIS_BUSES_LAST_SEEN_KEY,
+        REDIS_BUSES_MOTION_KEY,
+        REDIS_INGEST_LAST_KEY,
+    )
+    .await
+}
+
+pub async fn load_active_bus_snapshot_with_keys(
+    state: &AppState,
+    latest_key: &str,
+    last_seen_key: &str,
+    motion_key: &str,
+    ingest_key: &str,
+) -> Result<RedisBusSnapshot, (StatusCode, Json<ErrorResponse>)> {
+    let now_ms = now_unix_ms();
+    let cutoff_ms = now_ms - state.bus_ttl_ms;
+    let mut redis_conn = state
+        .redis_client
+        .get_multiplexed_async_connection()
+        .await
+        .map_err(internal_error)?;
+
+    let stale_bus_ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
+        .arg(last_seen_key)
+        .arg("-inf")
+        .arg(cutoff_ms)
+        .query_async(&mut redis_conn)
+        .await
+        .map_err(internal_error)?;
+
+    if !stale_bus_ids.is_empty() {
+        let mut delete_pipe = redis::pipe();
+        delete_pipe
+            .cmd("HDEL")
+            .arg(latest_key)
+            .arg(&stale_bus_ids)
+            .ignore();
+        delete_pipe
+            .cmd("HDEL")
+            .arg(motion_key)
+            .arg(&stale_bus_ids)
+            .ignore();
+        delete_pipe
+            .cmd("ZREMRANGEBYSCORE")
+            .arg(last_seen_key)
+            .arg("-inf")
+            .arg(cutoff_ms)
+            .ignore();
+        delete_pipe
+            .query_async::<()>(&mut redis_conn)
+            .await
+            .map_err(internal_error)?;
+    }
+
+    let active_bus_ids: Vec<String> = redis::cmd("ZRANGEBYSCORE")
+        .arg(last_seen_key)
+        .arg(cutoff_ms + 1)
+        .arg("+inf")
+        .query_async(&mut redis_conn)
+        .await
+        .map_err(internal_error)?;
+
+    let buses: Vec<BusPosition> = if active_bus_ids.is_empty() {
+        Vec::new()
+    } else {
+        let raw_buses: Vec<Option<String>> = redis::cmd("HMGET")
+            .arg(latest_key)
+            .arg(&active_bus_ids)
+            .query_async(&mut redis_conn)
+            .await
+            .map_err(internal_error)?;
+
+        raw_buses
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| serde_json::from_str::<BusPosition>(&entry).ok())
+            .collect()
+    };
+
+    let motion_states: HashMap<String, BusMotionState> = if active_bus_ids.is_empty() {
+        HashMap::new()
+    } else {
+        let raw_states: Vec<Option<String>> = redis::cmd("HMGET")
+            .arg(motion_key)
+            .arg(&active_bus_ids)
+            .query_async(&mut redis_conn)
+            .await
+            .map_err(internal_error)?;
+
+        active_bus_ids
+            .iter()
+            .cloned()
+            .zip(raw_states.into_iter())
+            .filter_map(|(bus_no, raw_state)| {
+                raw_state.and_then(|value| {
+                    serde_json::from_str::<BusMotionState>(&value)
+                        .ok()
+                        .map(|state| (bus_no, state))
+                })
+            })
+            .collect()
+    };
+
+    let last_ingest_at_unix_ms: Option<i64> = redis::cmd("GET")
+        .arg(ingest_key)
+        .query_async(&mut redis_conn)
+        .await
+        .unwrap_or(None);
+
+    Ok(RedisBusSnapshot {
+        buses,
+        motion_states,
+        active_bus_count: active_bus_ids.len(),
+        last_ingest_at_unix_ms,
+    })
+}
+
+// ── ETA calculation ───────────────────────────────────────────────────────────
+
+pub fn calculate_stop_eta_from_snapshot(
     snapshot: &RedisBusSnapshot,
     gtfs: &GtfsCache,
     stop_id: &str,
@@ -1136,113 +955,7 @@ fn calculate_stop_eta_from_snapshot(
     all_eta_results
 }
 
-fn update_bus_motion_state(
-    previous_state: Option<&BusMotionState>,
-    bus: &BusPosition,
-    now_ms: i64,
-) -> BusMotionState {
-    let reference_lat = previous_state
-        .map(|state| state.reference_lat)
-        .unwrap_or(bus.latitude);
-    let reference_lon = previous_state
-        .map(|state| state.reference_lon)
-        .unwrap_or(bus.longitude);
-    let distance_from_reference =
-        haversine_distance(bus.latitude, bus.longitude, reference_lat, reference_lon);
-    let is_slow = bus.speed <= STATIONARY_SPEED_THRESHOLD_KMH;
-
-    if distance_from_reference >= STATIONARY_DISTANCE_THRESHOLD_KM {
-        return BusMotionState {
-            reference_lat: bus.latitude,
-            reference_lon: bus.longitude,
-            stationary_since_unix_ms: is_slow.then_some(now_ms),
-        };
-    }
-
-    if is_slow {
-        return BusMotionState {
-            reference_lat,
-            reference_lon,
-            stationary_since_unix_ms: previous_state
-                .and_then(|state| state.stationary_since_unix_ms)
-                .or(Some(now_ms)),
-        };
-    }
-
-    BusMotionState {
-        reference_lat: bus.latitude,
-        reference_lon: bus.longitude,
-        stationary_since_unix_ms: None,
-    }
-}
-
-fn is_bus_stationary(snapshot: &RedisBusSnapshot, bus_no: &str, now_ms: i64, stationary_window_ms: i64) -> bool {
-    snapshot
-        .motion_states
-        .get(bus_no)
-        .and_then(|state| state.stationary_since_unix_ms)
-        .map(|since_ms| now_ms - since_ms >= stationary_window_ms)
-        .unwrap_or(false)
-}
-
-fn filter_non_stationary_buses(snapshot: &RedisBusSnapshot, stationary_window_ms: i64) -> Vec<BusPosition> {
-    let now_ms = now_unix_ms();
-
-    snapshot
-        .buses
-        .iter()
-        .filter(|bus| !is_bus_stationary(snapshot, &bus.bus_no, now_ms, stationary_window_ms))
-        .cloned()
-        .collect()
-}
-
-fn resolve_current_stop(
-    bus: &BusPosition,
-    route_stops: &RouteStopsResponse,
-) -> Option<ResolvedCurrentStop> {
-    if let Some(bus_stop_id) = bus.busstop_id.as_ref().filter(|id| !id.is_empty()) {
-        if let Some(stop) = route_stops
-            .stops
-            .iter()
-            .find(|stop| stop.stop_id == *bus_stop_id)
-        {
-            return Some(ResolvedCurrentStop {
-                stop_id: stop.stop_id.clone(),
-                stop_name: stop.stop_name.clone(),
-                sequence: stop.sequence,
-                source: StopResolutionSource::Live,
-            });
-        }
-    }
-
-    let nearest_stop = route_stops.stops.iter().min_by(|a, b| {
-        let distance_a = haversine_distance(bus.latitude, bus.longitude, a.stop_lat, a.stop_lon);
-        let distance_b = haversine_distance(bus.latitude, bus.longitude, b.stop_lat, b.stop_lon);
-        distance_a
-            .partial_cmp(&distance_b)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    })?;
-
-    let distance_km = haversine_distance(
-        bus.latitude,
-        bus.longitude,
-        nearest_stop.stop_lat,
-        nearest_stop.stop_lon,
-    );
-
-    if distance_km > MAX_DERIVED_STOP_DISTANCE_KM {
-        return None;
-    }
-
-    Some(ResolvedCurrentStop {
-        stop_id: nearest_stop.stop_id.clone(),
-        stop_name: nearest_stop.stop_name.clone(),
-        sequence: nearest_stop.sequence,
-        source: StopResolutionSource::Derived,
-    })
-}
-
-async fn calculate_route_eta(
+pub async fn calculate_route_eta(
     state: &AppState,
     route_id: &str,
     target_stop_id: &str,
@@ -1252,14 +965,13 @@ async fn calculate_route_eta(
     let route_stops = get_route_stops_from_cache(route_id, state.gtfs_cache.as_ref())
         .map_err(|(status, msg)| (status, Json(ErrorResponse { error: msg })))?;
 
-    calculate_route_eta_from_stops(&visible_buses, route_id, target_stop_id, &route_stops).map_err(
-        |message| {
+    calculate_route_eta_from_stops(&visible_buses, route_id, target_stop_id, &route_stops)
+        .map_err(|message| {
             (
                 StatusCode::NOT_FOUND,
                 Json(ErrorResponse { error: message }),
             )
-        },
-    )
+        })
 }
 
 fn calculate_route_eta_from_stops(
@@ -1349,7 +1061,9 @@ fn calculate_route_eta_from_stops(
     Ok(eta_results)
 }
 
-fn get_route_stops_from_cache(
+// ── Cache lookups ─────────────────────────────────────────────────────────────
+
+pub fn get_route_stops_from_cache(
     route_id: &str,
     gtfs_cache: &GtfsCache,
 ) -> Result<RouteStopsResponse, (StatusCode, String)> {
@@ -1365,7 +1079,7 @@ fn get_route_stops_from_cache(
         })
 }
 
-fn get_routes_for_stop_from_cache(
+pub fn get_routes_for_stop_from_cache(
     stop_id: &str,
     gtfs_cache: &GtfsCache,
 ) -> Result<Vec<StopRouteSummary>, (StatusCode, String)> {
@@ -1391,8 +1105,64 @@ fn get_routes_for_stop_from_cache(
     Ok(stop_routes)
 }
 
-// Decode base64 + gzip compressed data from the websocket
-fn decode_bus_data(encoded: &str) -> Option<String> {
+// ── Bus stationarity filtering ────────────────────────────────────────────────
+
+pub fn is_bus_stationary(
+    snapshot: &RedisBusSnapshot,
+    bus_no: &str,
+    now_ms: i64,
+    stationary_window_ms: i64,
+) -> bool {
+    snapshot
+        .motion_states
+        .get(bus_no)
+        .and_then(|state| state.stationary_since_unix_ms)
+        .map(|since_ms| now_ms - since_ms >= stationary_window_ms)
+        .unwrap_or(false)
+}
+
+pub fn filter_non_stationary_buses(
+    snapshot: &RedisBusSnapshot,
+    stationary_window_ms: i64,
+) -> Vec<BusPosition> {
+    let now_ms = now_unix_ms();
+
+    snapshot
+        .buses
+        .iter()
+        .filter(|bus| !is_bus_stationary(snapshot, &bus.bus_no, now_ms, stationary_window_ms))
+        .cloned()
+        .collect()
+}
+
+// ── Shared utilities ──────────────────────────────────────────────────────────
+
+pub async fn record_ingestor_error(state: &AppState, message: String, count_reconnect: bool) {
+    let mut status = state.ingestor_status.write().await;
+    status.connected = false;
+    status.last_error = Some(message);
+    if count_reconnect {
+        status.reconnect_count += 1;
+    }
+}
+
+pub fn internal_error(error: impl std::fmt::Display) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: format!("Internal server error: {}", error),
+        }),
+    )
+}
+
+pub fn now_unix_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+pub fn decode_bus_data(encoded: &str) -> Option<String> {
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(encoded)
         .ok()?;
@@ -1404,9 +1174,8 @@ fn decode_bus_data(encoded: &str) -> Option<String> {
     Some(decompressed)
 }
 
-// Calculate haversine distance between two GPS coordinates (returns km)
-fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
-    let r = 6371.0; // Earth radius in km
+pub fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let r = 6371.0;
     let dlat = (lat2 - lat1).to_radians();
     let dlon = (lon2 - lon1).to_radians();
     let a = (dlat / 2.0).sin().powi(2)
@@ -1415,7 +1184,8 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     r * c
 }
 
-// Data OpenDOSM Prasarana - uses protobuf (alternative data source)
+// ── Dead code: alternative protobuf data source ───────────────────────────────
+
 #[allow(dead_code)]
 async fn prasarana_gtfs_data() -> Json<gtfs_realtime::FeedMessage> {
     let endpoint =
@@ -1428,452 +1198,7 @@ async fn prasarana_gtfs_data() -> Json<gtfs_realtime::FeedMessage> {
     Json(feed)
 }
 
-// GTFS data loading functions
-fn load_routes() -> Result<Vec<Route>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("routes.txt");
-    let file = File::open(path)?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(file);
-    let mut routes = Vec::new();
-    for result in rdr.deserialize() {
-        let route: Route = result?;
-        routes.push(route);
-    }
-    Ok(routes)
-}
-
-fn load_trips() -> Result<HashMap<String, Vec<Trip>>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("trips.txt");
-    let file = File::open(path)?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(file);
-    let mut trips_by_route: HashMap<String, Vec<Trip>> = HashMap::new();
-    for result in rdr.deserialize() {
-        let trip: Trip = result?;
-        trips_by_route
-            .entry(trip.route_id.clone())
-            .or_default()
-            .push(trip);
-    }
-    Ok(trips_by_route)
-}
-
-fn load_stop_times() -> Result<HashMap<String, Vec<StopTime>>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("stop_times.txt");
-    let file = File::open(path)?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(file);
-    let mut stop_times_by_trip: HashMap<String, Vec<StopTime>> = HashMap::new();
-    for result in rdr.deserialize() {
-        let stop_time: StopTime = result?;
-        stop_times_by_trip
-            .entry(stop_time.trip_id.clone())
-            .or_default()
-            .push(stop_time);
-    }
-    Ok(stop_times_by_trip)
-}
-
-fn load_stops() -> Result<HashMap<String, Stop>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("stops.txt");
-    let file = File::open(path)?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(file);
-    let mut stops_map = HashMap::new();
-    for result in rdr.deserialize() {
-        let stop: Stop = result?;
-        stops_map.insert(stop.stop_id.clone(), stop);
-    }
-    Ok(stops_map)
-}
-
-fn load_shapes() -> Result<HashMap<String, Vec<ShapePoint>>, Box<dyn std::error::Error>> {
-    let path = gtfs_data_dir().join("shapes.txt");
-    let file = File::open(path)?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(file);
-    let mut shapes_by_id: HashMap<String, Vec<ShapePoint>> = HashMap::new();
-    for result in rdr.deserialize() {
-        let shape_point: ShapePoint = result?;
-        shapes_by_id
-            .entry(shape_point.shape_id.clone())
-            .or_default()
-            .push(shape_point);
-    }
-
-    for points in shapes_by_id.values_mut() {
-        points.sort_by_key(|point| point.shape_pt_sequence);
-    }
-
-    Ok(shapes_by_id)
-}
-
-fn gtfs_data_dir() -> PathBuf {
-    if let Ok(path) = env::var("GTFS_DATA_PATH") {
-        return PathBuf::from(path);
-    }
-
-    StdPath::new(env!("CARGO_MANIFEST_DIR")).join("rapid_kl_data")
-}
-
-// Get stops by route_id
-fn get_stops_by_route(
-    route_id: &str,
-    routes: &[Route],
-    trips_by_route: &HashMap<String, Vec<Trip>>,
-    stop_times_by_trip: &HashMap<String, Vec<StopTime>>,
-    stops_map: &HashMap<String, Stop>,
-) -> Result<RouteStopsResponse, (StatusCode, String)> {
-    // Find the route
-    let route = routes
-        .iter()
-        .find(|r| r.route_id == route_id)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("Route '{}' not found", route_id),
-            )
-        })?;
-
-    // Get trips for this route
-    let trips = trips_by_route.get(route_id).ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            format!("No trips found for route '{}'", route_id),
-        )
-    })?;
-
-    // Get the first trip's stop times
-    let first_trip = &trips[0];
-    let stop_times = stop_times_by_trip.get(&first_trip.trip_id).ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            format!("No stop times found for trip '{}'", first_trip.trip_id),
-        )
-    })?;
-
-    // Sort by stop_sequence
-    let mut sorted_stop_times: Vec<&StopTime> = stop_times.iter().collect();
-    sorted_stop_times.sort_by_key(|st| st.stop_sequence);
-
-    // Build response with stop details
-    let stops: Vec<StopWithDetails> = sorted_stop_times
-        .into_iter()
-        .filter_map(|st| {
-            stops_map.get(&st.stop_id).map(|stop| StopWithDetails {
-                stop_id: stop.stop_id.clone(),
-                stop_name: stop.stop_name.clone(),
-                stop_desc: stop.stop_desc.clone(),
-                stop_lat: stop.stop_lat,
-                stop_lon: stop.stop_lon,
-                sequence: st.stop_sequence,
-            })
-        })
-        .collect();
-
-    Ok(RouteStopsResponse {
-        route_id: route.route_id.clone(),
-        route_short_name: route.route_short_name.clone(),
-        route_long_name: route.route_long_name.clone(),
-        stops,
-    })
-}
-
-fn get_shape_by_route(
-    route_id: &str,
-    stop_id: Option<&str>,
-    routes: &[Route],
-    trips_by_route: &HashMap<String, Vec<Trip>>,
-    stop_times_by_trip: &HashMap<String, Vec<StopTime>>,
-    shapes_by_id: &HashMap<String, Vec<ShapePoint>>,
-) -> Result<RouteShapeResponse, (StatusCode, String)> {
-    let route = routes
-        .iter()
-        .find(|r| r.route_id == route_id)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("Route '{}' not found", route_id),
-            )
-        })?;
-
-    let trips = trips_by_route.get(route_id).ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            format!("No trips found for route '{}'", route_id),
-        )
-    })?;
-
-    let mut shape_trip_counts: HashMap<String, usize> = HashMap::new();
-    let mut shape_trip_counts_for_stop: HashMap<String, usize> = HashMap::new();
-
-    for trip in trips {
-        *shape_trip_counts.entry(trip.shape_id.clone()).or_insert(0) += 1;
-
-        if let Some(target_stop_id) = stop_id {
-            if let Some(stop_times) = stop_times_by_trip.get(&trip.trip_id) {
-                let has_target_stop = stop_times
-                    .iter()
-                    .any(|stop_time| stop_time.stop_id == target_stop_id);
-                if has_target_stop {
-                    *shape_trip_counts_for_stop
-                        .entry(trip.shape_id.clone())
-                        .or_insert(0) += 1;
-                }
-            }
-        }
-    }
-
-    let preferred_counts = if shape_trip_counts_for_stop.is_empty() {
-        &shape_trip_counts
-    } else {
-        &shape_trip_counts_for_stop
-    };
-
-    let selected_shape_id = preferred_counts
-        .iter()
-        .max_by(|(shape_a, count_a), (shape_b, count_b)| {
-            count_a
-                .cmp(count_b)
-                .then_with(|| shape_a.cmp(shape_b).reverse())
-        })
-        .map(|(shape_id, _)| shape_id.clone())
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                format!("No shape found for route '{}'", route_id),
-            )
-        })?;
-
-    let shape_points = shapes_by_id.get(&selected_shape_id).ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            format!(
-                "Shape '{}' not found in shapes.txt for route '{}'",
-                selected_shape_id, route_id
-            ),
-        )
-    })?;
-
-    let points = shape_points
-        .iter()
-        .map(|point| ShapePointResponse {
-            lat: point.shape_pt_lat,
-            lon: point.shape_pt_lon,
-            sequence: point.shape_pt_sequence,
-        })
-        .collect();
-
-    Ok(RouteShapeResponse {
-        route_id: route.route_id.clone(),
-        shape_id: selected_shape_id,
-        points,
-    })
-}
-
-// Axum handler for /route/:route_id/stops
-async fn get_route_stops(
-    Path(route_id): Path<String>,
-    State(state): State<AppState>,
-) -> Result<Json<RouteStopsResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match get_route_stops_from_cache(&route_id, state.gtfs_cache.as_ref()) {
-        Ok(response) => {
-            println!("Calling get_route_stops for route_id={}", route_id);
-            Ok(Json(response))
-        }
-        Err((status, message)) => Err((status, Json(ErrorResponse { error: message }))),
-    }
-}
-
-// Axum handler for /route/:route_id/shape?stop_id={stop_id}
-async fn get_route_shape(
-    Path(route_id): Path<String>,
-    Query(query): Query<RouteShapeQuery>,
-    State(state): State<AppState>,
-) -> Result<Json<RouteShapeResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match get_shape_by_route(
-        &route_id,
-        query.stop_id.as_deref(),
-        &state.gtfs_cache.context.routes,
-        &state.gtfs_cache.context.trips_by_route,
-        &state.gtfs_cache.context.stop_times_by_trip,
-        &state.gtfs_cache.shapes_by_id,
-    ) {
-        Ok(response) => Ok(Json(response)),
-        Err((status, message)) => Err((status, Json(ErrorResponse { error: message }))),
-    }
-}
-
-// Axum handler for /stops/nearest?lat={lat}&lon={lon}
-async fn get_nearest_stop(
-    Query(query): Query<NearestStopQuery>,
-    State(state): State<AppState>,
-) -> Result<Json<NearestStopResponse>, (StatusCode, Json<ErrorResponse>)> {
-    if !(-90.0..=90.0).contains(&query.lat) || !(-180.0..=180.0).contains(&query.lon) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: "Invalid latitude/longitude values".to_string(),
-            }),
-        ));
-    }
-
-    let nearest_stop = state
-        .gtfs_cache
-        .context
-        .stops_map
-        .values()
-        .map(|stop| {
-            let distance_km =
-                haversine_distance(query.lat, query.lon, stop.stop_lat, stop.stop_lon);
-            (stop, distance_km)
-        })
-        .min_by(|(_, left_distance), (_, right_distance)| {
-            left_distance
-                .partial_cmp(right_distance)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: "No stops available".to_string(),
-                }),
-            )
-        })?;
-
-    let (stop, distance_km) = nearest_stop;
-    let response = NearestStopResponse {
-        stop_id: stop.stop_id.clone(),
-        stop_name: stop.stop_name.clone(),
-        stop_desc: stop.stop_desc.clone(),
-        stop_lat: stop.stop_lat,
-        stop_lon: stop.stop_lon,
-        distance_km: (distance_km * 1000.0).round() / 1000.0,
-        distance_meters: (distance_km * 1000.0 * 10.0).round() / 10.0,
-    };
-
-    println!(
-        "Calling get_nearest_stop for lat={}, lon={} -> stop_id={}",
-        query.lat, query.lon, response.stop_id
-    );
-    Ok(Json(response))
-}
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn mock_bus(bus_no: &str) -> BusPosition {
-        BusPosition {
-            dt_received: None,
-            dt_gps: None,
-            latitude: 3.1,
-            longitude: 101.6,
-            dir: None,
-            speed: 0.0,
-            angle: 0.0,
-            route: "T7890".to_string(),
-            bus_no: bus_no.to_string(),
-            trip_no: None,
-            captain_id: None,
-            trip_rev_kind: None,
-            engine_status: 1,
-            accessibility: 1,
-            busstop_id: None,
-            provider: "RKL".to_string(),
-        }
-    }
-
-    #[test]
-    fn gtfs_cache_builds_with_expected_indexes() {
-        let cache = GtfsCache::build().expect("cache should build from GTFS files");
-
-        assert!(
-            cache.route_stops_by_route.contains_key("T7890"),
-            "expected T7890 route to be indexed"
-        );
-        assert!(
-            cache.context.stops_map.contains_key("1000838"),
-            "expected stop 1000838 to exist"
-        );
-    }
-
-    #[test]
-    fn route_stops_from_cache_are_sequence_sorted() {
-        let cache = GtfsCache::build().expect("cache should build from GTFS files");
-        let route = get_route_stops_from_cache("T7890", &cache)
-            .expect("T7890 route stops should be available");
-
-        assert!(!route.stops.is_empty(), "route should include stops");
-        let mut last_seq = 0;
-        for stop in route.stops {
-            assert!(stop.sequence >= last_seq, "stop sequences must be sorted");
-            last_seq = stop.sequence;
-        }
-    }
-
-    #[test]
-    fn routes_for_stop_from_cache_returns_sorted_summaries() {
-        let cache = GtfsCache::build().expect("cache should build from GTFS files");
-        let routes = get_routes_for_stop_from_cache("1000838", &cache)
-            .expect("routes for stop 1000838 should be available");
-
-        assert!(!routes.is_empty(), "stop should have at least one route");
-        let mut sorted = routes.clone();
-        sorted.sort_by(|a, b| {
-            a.route_short_name
-                .cmp(&b.route_short_name)
-                .then(a.route_id.cmp(&b.route_id))
-        });
-        assert_eq!(routes, sorted, "routes must be stable-sorted");
-    }
-
-    #[test]
-    fn stationarity_boundary_uses_configured_window() {
-        let window_ms = 300_000;
-        let now_ms = 1_000_000;
-        let mut motion_states = HashMap::new();
-        motion_states.insert(
-            "BUS-A".to_string(),
-            BusMotionState {
-                reference_lat: 3.1,
-                reference_lon: 101.6,
-                stationary_since_unix_ms: Some(now_ms - window_ms),
-            },
-        );
-        motion_states.insert(
-            "BUS-B".to_string(),
-            BusMotionState {
-                reference_lat: 3.1,
-                reference_lon: 101.6,
-                stationary_since_unix_ms: Some(now_ms - (window_ms - 1)),
-            },
-        );
-
-        let snapshot = RedisBusSnapshot {
-            buses: vec![mock_bus("BUS-A"), mock_bus("BUS-B"), mock_bus("BUS-C")],
-            motion_states,
-            active_bus_count: 3,
-            last_ingest_at_unix_ms: Some(now_ms),
-        };
-
-        assert!(
-            is_bus_stationary(&snapshot, "BUS-A", now_ms, window_ms),
-            "bus exactly at threshold should be treated as stationary"
-        );
-        assert!(
-            !is_bus_stationary(&snapshot, "BUS-B", now_ms, window_ms),
-            "bus below threshold should not be treated as stationary"
-        );
-        assert!(
-            !is_bus_stationary(&snapshot, "BUS-C", now_ms, window_ms),
-            "bus with no motion state should not be treated as stationary"
-        );
-    }
-}
+mod tests;

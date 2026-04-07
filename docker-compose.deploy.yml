@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: rapidbro
+      POSTGRES_USER: rapidbro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "3002:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rapidbro -d rapidbro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     restart: always
@@ -24,10 +41,16 @@ services:
   fe:
     image: ${GHCR_NAMESPACE}/rapidbro-fe:${IMAGE_TAG}
     restart: always
+    environment:
+      DATABASE_URL: postgres://rapidbro:${POSTGRES_PASSWORD}@postgres:5432/rapidbro
     depends_on:
-      - be
+      postgres:
+        condition: service_healthy
+      be:
+        condition: service_started
     ports:
       - "3031:3000"
 
 volumes:
+  postgres_data:
   redis_data:

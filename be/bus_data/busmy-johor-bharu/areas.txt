@@ -1,0 +1,987 @@
+area_id,area_name
+area_80003173,The Store Pandan
+area_80014130,Opp Lembaga Nanas Malaysia BBU
+area_80003175,OPP Danga Bay
+area_80012159,Pusat Khidmat Pelanggan TNB @ Johor Bahr
+area_80004271,Kampung Pok
+area_80007586,Regency Specialist Hospital
+area_80011672,TAMAN PONTIAN PERDANA
+area_80012278,Paragon Market Place
+area_80008200,Opp Taman Kota Intan
+area_80003051,Crystal Crown
+area_80002934,Skudai Kanan
+area_80003180,Dataran Bandaraya Johor Bahru / Sri Gela
+area_80008599,SK Bandar Baru Uda 2
+area_80003243,Grand Paragon Hotel
+area_80008195,Opp Smart Pandan
+area_80011633,SK Seri Alam 2
+area_80008923,KFC Taman Puteri Wangsa
+area_80004327,SRI PULAI PERDANA (1)
+area_80000376,Opp Caltex Taman Perling
+area_80014189,Jalan Nanas 13
+area_80003061,OPP Mutiara Motors
+area_80011307,Opp Persisiran Perling Spg Jalan Pucung
+area_80000607,Opp JALAN ISMAIL SULTAN
+area_80011335,OPP TAMAN JOHOR
+area_80002863,Jalan Tasek 24
+area_80003110,OPP Pejabat LLM
+area_80003130,Taman Putri Kulai
+area_80002885,Todays Market (Jalan Masai Lama)
+area_80004233,SK Tiram Duku
+area_80011669,Sekolah Agama Pengkalan Raja
+area_80004171,Hospital Sultanah Aminah
+area_80013330,Opp Persiaran Pulai Mutiara 2
+area_80010079,TD Point
+area_80006525,KAMPUNG PARIT KECHIL
+area_80014202,Eco Business Park 3
+area_80008917,Taman Sri Pulai (Lebuhraya Skudai - Pont
+area_80003032,Taman Sentosa
+area_80000522,CIMB GELANG PATAH
+area_80003118,Opp Apartment Larkin Indah 
+area_80014182,Opp Jalan Eco Perniagaan 27
+area_80003006,U turn Kangkar tebrau
+area_80000727,OPP KAMPUNG SUNGAI BUNYI PARIT HAJI ISMA
+area_80004353,SK Taman Universiti 1
+area_80010460,1 Medini Hub
+area_80008638,Kampung Nesa
+area_80014168,Simpang Kg Sg Rinting
+area_80014194,Jalan Tembika 11
+area_80007705,Opp Balai Polis Johor Jaya
+area_80003035,OPP Caltex Taman Melodies
+area_80012301,Opp Kawasan Perindustrian Taman Universi
+area_80010275,Masjid Taman Pulai Indah
+area_80011124,Opp Taman Rosmerah
+area_80012289,Opp Simpang Jln Sengkang
+area_80011790,Jalan Permas Utara
+area_80003018,Jalan Bayu 11 (Caltex )
+area_80000403,Opp Petron Bukit Indah
+area_80002861,Jalan Tasek 15
+area_80004189,OPP The Store Pandan
+area_80007620,Stadium Larkin
+area_80008035,Taman Johor
+area_80000383,Opp Perling Heights
+area_80007699,Opp Restoran Pekin Johor Jaya
+area_80004388,SK Taman Cendana
+area_80000401,Opp BUKIT INDAH 2
+area_80003083,Petron TUTA
+area_80000689,Kampung Selangor Baru
+area_80000643,Blok 33 & 34
+area_80003169,Pejabat Pos Skudai
+area_80003046,Opp IPK Johor
+area_80006519,Opp Econsave Pontian
+area_80010303,Opp Econsave Sri Lalang
+area_80000611,Opp Surau Al Hidayah
+area_80014201,Opp Jalan Mangga
+area_80007615,Impian Business Park
+area_80004366,Medan Selera MBIP
+area_80011554,Opp Shell Tmn Puteri Skudai
+area_80002986,SMK Taman Daya
+area_80010438,R&F Mall
+area_80003201,Opp TKPM Ulu Tiram
+area_80004385,Taman Teratai 2
+area_80002872,Dewanraya Bandar Seri Alam Jalan Suria
+area_80011773,Kacang Pool Hj
+area_80011291,Taman Daya
+area_80011526,Opp Desa Skudai Apartment
+area_80004234,Simpang PTP
+area_80004420,Opp Taman Sri Pulai (Lebuhraya Skudai - 
+area_80003058,Opp RENAISSANCE
+area_80003199,OPP Kompleks Pekan Rabu
+area_80014079,Perjiranan 9 Dato Onn
+area_80004432,Taman Selesa Jaya
+area_80003183,Pusat Islam Negeri Johor
+area_80011319,Lotus Bukit Indah
+area_80014187,Jalan Nanas 1
+area_80011514,KipMall Masai
+area_80003038,The Zone
+area_80011304,B5 Johor Street Market / Plaza Angsana
+area_80008601,Sekolah Tun Fatimah
+area_80014214,U - Sentral Masai
+area_80014184,Padang Jalan Pulasan
+area_80011532,Opp U Mall
+area_80005498,Opp CIDB Johor
+area_80000697,GIATMARA TG Piai
+area_80003124,Opp Jejantas Taman Sri Kulai
+area_80011334,99 SPEEDMART JALAN NIBONG
+area_80003138,SMK Munshi Abdullah Kulai
+area_80013309,Opp Petronas Jalan Rinting
+area_80006558,PERUMAHAN RAKYAT LIMA KEDAI
+area_80011286,Opp SMK Munshi Abdullah
+area_80000610,Opp Petronas Bukit Indah
+area_80011320,PERSIARAN INDAH (1)
+area_80011555,Opp TM Skudai
+area_80011313,Dewan Raya Taman Perling
+area_80013289,Macdonalds Seri Austin
+area_80011561,Sekolah Agama Kenangan Murni Kampung Pok
+area_80008609,Opp Tangki Air Tmn Molek
+area_80012180,NSK Ulu Tiram
+area_80008610,ROSMERAH 9 
+area_80004426,Jalan Makmur 1 / Makmur 2
+area_80004392,Medan Selera Taman Sri Pulai 2
+area_80014161,Opp Bukit Layang Layang
+area_80014200,Jalan Mangga
+area_80011677,EcoShop Pontian
+area_80010095,Opp Persiaran Laksamana
+area_80014135,SMK Permas Jaya 3
+area_80012274,Opp Malaya Glass Factory
+area_80000661,Opp Petron Pontian
+area_80014181,Jalan Eco Perniagaan 27
+area_80003123,Arked Mara
+area_80003206,SMK Tun Habab
+area_80005516,Terminal Putri Kulai
+area_80000649,Opp TERMINAL TUTA
+area_80004196,Taman Desa Cemerlang
+area_80003144,Pertubuhan Peladang 
+area_80011568,Opp Pejabat Pos Besar
+area_80011527,Perumahan Staf UTM Desa Skudai
+area_80012297,Perumahan Flat Cengal
+area_80008620,Opp Petron Jalan Daya
+area_80008491,Opp Paradigm Mall
+area_80011351,Jb Sentral 2
+area_80002984,Bus Stop Petron Jalan Daya
+area_80011497,TAMAN ROSMERAH
+area_80012179,Opp Jalan Tun Sri Lanang
+area_80011360,SURAU NUR HIDAYAH
+area_80003161,Opp SK Kampung Pasir / Giant Tampoi
+area_80008117,HAB TAMAN TAN SRI YAACOB
+area_80011566,Aspira Square
+area_80002859,Pangsapuri Sri Intan
+area_80000370,Opp SK TAMAN PERLING
+area_80013331,Persiaran Pulai Mutiara 2
+area_80010255,Taman Desa Baiduri
+area_80000433,MCDONALDS TUN AMINAH / KEDAI BUAH
+area_80003075,Poliklinik Rozikin
+area_80011783,Aeon (Back)
+area_80012169,Opp KFC Taman Puteri Wangsa
+area_80011550,Flat Kangkar Pulai (2)
+area_80011535,Taman Awam MBIP Taman U
+area_80004428,Opp Pasaraya Everjoy
+area_80013326,Opp Viscaria Pulai Indah
+area_80003094,OPP SK Senai
+area_80012299,Simpang Jalan Kemuliaan 2
+area_80008605,SJK C Tampoi
+area_80011331,Opp 7-ELEVEN BUKIT INDAH
+area_80004320,Perpustakaan Awam Taman Universiti
+area_80003062,Jalan Permas 7
+area_80006520,Opp THE COOKIES FACTORY
+area_80012286,Opp Al Mizan
+area_80012268,Opp Kolej Vokasional ERT Azizah
+area_80011501,KPJ Pasir Gudang
+area_80004430,Taman Nusa Jaya Mas 2
+area_80006517,Opp SMK Gelang Patah
+area_80011279,Lebuh Medini Utama
+area_80002870,Maybank Bandar Seri Alam
+area_80004288,Warung Santai Cik Ton
+area_80003179,Opp IKEA Tebrau Jalan Tebrau
+area_80003070,Hub Permas Jaya
+area_80003117,OPP Hospital Kulai
+area_80006536,TM Point Skudai / MZ WORLD
+area_80014154,Opp Kuarters Guru Taman Scientex
+area_80004329,SRI PULAI PERDANA 2
+area_80006529,Klinik Desa Pengkalan Raja
+area_80012282,Opp F&N
+area_80012294,Taman Putri Persiaran Sri Putri 3(2)
+area_80003158,Petronas Saleng
+area_80000700,Opp MAYBANK PEKAN NENAS
+area_80004173,Opp Kampung Pasir
+area_80004289,Danga City Mall
+area_80008199,OPP SMK Tun Habab
+area_80008608,Tangki Air Taman Molek
+area_80003028,Jalan Masai Lama 2
+area_80003197,OPP Taman Dato Chellam
+area_80004251,JB Sentral
+area_80007624,Perkuburan Mahmoodiah
+area_80003177,Opp Beletime / M-Suites
+area_80007708,Taman Molek
+area_80010015,Tadika Setia indah
+area_80004302,Kampung Pendas Baru
+area_80010281,Opp FLAT KANGKAR PULAI (1)
+area_80000703,TAMAN PERINDUSTRIAN PEKAN NENAS 1
+area_80003073,SK Permas Jaya 1
+area_80014171,7 Eleven Sierra Perdana
+area_80013287,Taman Seri Austin
+area_80003155,Hospital Kulai
+area_80002873,Jalan Suria 80
+area_80004345,SImpang Jalan Kemuliaan 30
+area_80003016,Shell Pandan
+area_80014152,Opp Politeknik Pasir Gudang
+area_80014160,Bukit Layang Layang
+area_80004223,Kampung Tiram Duku 2
+area_80002866,Pangsapuri Sri Ilham
+area_80003055,Opp Petronas Bayu Puteri
+area_80011530,Opp SMK Taman Universiti 2
+area_80014159,Taman Dahlia Jalan Sekuntum 2
+area_80003134,Flat Taman Putri
+area_80011347,OPP PEJABAT POS GELANG PATAH
+area_80003004,Taman Delima
+area_80014203,Opp Eco Business Park 3
+area_80008081,Bandar Selesa Jaya
+area_80007742,Opp BHP Tmn Desa Skudai
+area_80011277,Sg Danga
+area_80004330,Petronas Kangkar Pulai
+area_80014193,Simpang Jalan Mangga 13
+area_80007764,OPP Todays Mall
+area_80008774,Taman Kota Kulai
+area_80011330,7-ELEVEN BUKIT INDAH
+area_80008097,Johor Tourist Information Center
+area_80003135,Taman Putri Persiaran Sri Putri 3(1)
+area_80000451,7 ELEVEN SRI ORKID
+area_80008600,Taman Suria Muafakat
+area_80014151,Politeknik Pasir Gudang
+area_80004419,Opp Arked Pulai Perdana
+area_80000444,OPP SEKOLAH AGAMA TUTA
+area_80011290,Opp Taman Delima
+area_80004216,Opp Dewan Serbaguna Taman Cendana 2
+area_80000706,Taman Mewah
+area_80014174,Opp Jalan Sierra Perdana 3/18
+area_80014206,Opp Masjid Taman Pasir Putih
+area_80011516,Opp Kampung Baru Masai
+area_80002889,Selera Kampung Melayu
+area_80008933,Opp TJ Mart Saleng
+area_80007757,OPP Pulada
+area_80011567,Opp SK Murni Pok
+area_80013338,Pangsapuri Pulai Mutiara 1
+area_80014060,Klinik Kesihatan Mahmoodiah
+area_80008558,Istana Pasir Pelangi
+area_80007588,Main Entrance Sutera Mall
+area_80011149,Opp Taman Pulai Flora
+area_80000437,JALAN PENDEKAR 18
+area_80004250,Opp SK Tanjung Adang
+area_80000595,SIMPANG JALAN INDAH 1/10
+area_80003067,KG Melayu Majidee
+area_80004226,OPP BSN Senai
+area_80000605,SK Taman Perling 3
+area_80007783,Jenjantas Kampug Melayu
+area_80011533,Pangsapuri Meranti
+area_80004318,Opp Kelab Sukan dan Rekreasi Taman Unive
+area_80013332,Taman Pulai Mutiara 1
+area_80014139,Opp Jalan Permas Utara
+area_80011308,Persisiran Perling 1
+area_80003024,OPP Restoran Aliff
+area_80011333,Johor International School
+area_80011299,Opp Johor International School
+area_80000726,Opp KILANG JCS
+area_80012172,Pasar Borong Kota Tinggi
+area_80003166,Sepakat Jaya
+area_80011274,Opp TM Auto Tyre
+area_80011667,BSN Pekan Nenas
+area_80000599,Opp PERSIARAN INDAH UTAMA
+area_80014083,Warung Saga
+area_80003205,Taman Kota Intan
+area_80011339,MASJID KG MELAYU LIMA KEDAI
+area_80004373,SK Taman Universiti 2
+area_80011521,Opp Petron Pasir Gudang East
+area_80000521,Opp CIMB GELANG PATAH
+area_80000397,PERSIARAN INDAH (3)
+area_80014104,RHB Bandar Baru UDA
+area_80003071,Jalan Permas 1/2
+area_80003157,TJ Mart Saleng
+area_80008535,Jalan Setia 1 Opp Setia Park
+area_80004270,Larkin Sentral
+area_80003133,OPP SMK Kota Kulai
+area_80011356,OPP 2N SHOP JALAN HANG JEBAT
+area_80003082,Poliklinik Penawar Taman Istimewa
+area_80011659,Arked Pulai Perdana
+area_80011276,Perling Height
+area_80003069,Majidee
+area_80010038,Sekolah Agama Taman Daya
+area_80003167,Opp Kuarters PUB
+area_80000405,Opp Indah Court Apartment
+area_80003007,Bus Stop Universal Cable
+area_80011676,Baitulmal Pontian
+area_80004193,Shell Bakawali
+area_80004378,Kawasan Perindustrian Taman Universiti
+area_80000680,KAMPUNG SUNGAI BUNYI PARIT HAJI ISMAIL
+area_80003126,Spg Jln Sengkang
+area_80014177,Cahaya Kota Puteri 1
+area_80003129,Opp Flat Taman Putri
+area_80003072,Pasar Borong Pandan
+area_80010302,Econsave Sri Lalang
+area_80003063,Mon Glori
+area_80004411,JALAN PULAI BESTARI 22 (2)
+area_80010110,Petronas Sri Orkid
+area_80000524,SMK Gelang Patah
+area_80013278,Opp Menara TH
+area_80013325,Viscaria Pulai Indah
+area_80004488,Terminal Bas Masai
+area_80008639,SK Kangkar Pulai 2
+area_80008490,Paradigm Mall
+area_80012166,Shell Tebrau
+area_80014143,Jalan Kenari 8 Taman Scientex
+area_80014205,Opp Sampan Shellout
+area_80011540,Opp Medan Selera Tmn Sri Pulai 2
+area_80011557,Taman D Utama
+area_80011546,Pasaraya Songmart SriPulai Perdana 2
+area_80011785,Jalan Permas 1/18
+area_80014162,TMIYC
+area_80013291,Opp Jalan Setia 3/12
+area_80003112,OPP Petronas Saleng
+area_80007583,Medan Selera Perling
+area_80011288,Opp Menara MSC Cyberport
+area_80000400,BUKIT INDAH 2
+area_80005504,Opp Legoland
+area_80011354,TAMAN SRI ORKID
+area_80004391,Taman Sri Pulai (Jalan Batai 9)
+area_80000597,JALAN INDAH 1/14 - 1/20
+area_80007741,BHP Tmn Desa Skudai
+area_80011564,I - Park
+area_80005497,CIDB Johor
+area_80011358,OPP CALTEX TASEK SENTRAL
+area_80003214,Taman Gunung Emas
+area_80011305,Opp Plaza Angsana
+area_80013340,Opp Taman Pulai Indah (1)
+area_80008836,Opp Universal Cable
+area_80014165,Opp Lebuhraya Pasir Gudang 2
+area_80004393,Opp Medan Selera Taman Sri Pulai 1
+area_80006534,Mardi Pontian
+area_80011283,Opp Medan Selera Kulai
+area_80011318,Opp Lotus Bukit Indah
+area_80004351,Surau Al Mukminun Taman U
+area_80006526,Opp KAMPUNG PARIT KECHIL
+area_80000718,OPP Kampung Parit Selangor
+area_80011779,Masjid Pasir Pelangi
+area_80010439,OPP R&F Mall
+area_80003187,OPP Dataran Bandaraya Johor Bahru / Sri 
+area_80007713,Desa Perwira
+area_80013290,Opp Wisma Peladang
+area_80004374,SA Taman Universiti
+area_80014180,Opp COURTs Southkey
+area_80003065,SK Permas Jaya 3
+area_80007697,OPP Prima Regency 1
+area_80014212,Opp Kilang Panasonic
+area_80007597,Taman Tasek
+area_80011280,Opp Lebuh Medini Utama
+area_80004176,OPP Hab Pekan Senai
+area_80013308,Petronas Jalan Rinting
+area_80012280,Petron Taman Gembira
+area_80008197,Kuil Arulmigu Sri Muniswarar
+area_80011525,Desa Skudai Apartment
+area_80002877,Flat Balau Block G
+area_80004447,Pasaraya Yos Jalan Tembikai 2
+area_80011781,MBSB Mid Valley
+area_80014186,Opp Pasaraya Yos Jalan Tembikai 2
+area_80011671,KAMPUNG PINANG SARI
+area_80011278,Opp Sg Danga
+area_80003023,JALAN BAYU
+area_80011792,Simpang Jalan Tenang 1
+area_80003087,Skudai Parade
+area_80007763,Todays Mall
+area_80004221,RENAISSANCE
+area_80011343,PEJABAT POS GELANG PATAH
+area_80004424,Blok 64
+area_80014133,Jalan Permas 16/1
+area_80004285,Jeti Kampung Pok
+area_80011293,Opp Tadika Mutiara Taman Daya
+area_80014196,Jalan Tembikai Utama
+area_80012170,TKPM Ulu Tiram
+area_80012275,Malaya Glass Factory
+area_80004201,Kampung Melayu Muafakat
+area_80003193,Taman Desa Jaya
+area_80011563,Hostel PTP
+area_80003022,OPP KG Melayu Majidee
+area_80000717,OPP KAMPUNG PARIT BARU
+area_80000594,Opp SIMPANG JALAN INDAH 1/10
+area_80003168,Shell Taman Puteri Skudai
+area_80013328,Persiaran Pulai Mutiara 1
+area_80007584,Opp Medan Selera Perling
+area_80006521,THE COOKIES FACTORY
+area_80003171,TM Skudai
+area_80008597,Pangsapuri Ledang Jalan Padi Mahsuri
+area_80011675,JPN Pontian
+area_80003085,Restoran Pokok Ceri
+area_80011372,Tampoi Indah
+area_80014082,Opp Restoran Pokok Ceri
+area_80000462,OPP JALAN BESTARI
+area_80007676,Taman Timur
+area_80008643,Opp ZY Motorsport
+area_80004429,Taman Nusajaya Mas 1
+area_80002912,BALAI POLIS GELANG PATAH
+area_80014213,Kilang Panasonic
+area_80014101,Pusat Kegiatan Kurikulum
+area_80004174,Kipmart Tampoi
+area_80007751,Bakar Batu
+area_80008631,Opp Blok 33 & 34
+area_80004204,Opp Kilang Nishinihon
+area_80012178,Jalan Tun Sri Lanang
+area_80000603,Opp Nusa Idaman
+area_80002867,PPR Seri Alam
+area_80011317,JALAN ISMAIL SULTAN
+area_80008616,MASJID KAMPUNG KANGKAR TEBRAU/SK KANGKAR
+area_80000396,Opp PERSIARAN INDAH (3)
+area_80007582,Opp Petronas Tampoi Utama
+area_80004181,Bandar Baru UDA
+area_80004360,Caltex Tuta
+area_80003057,Petronas Bayu Puteri
+area_80011670,Setia Ibarat
+area_80011147,Flat Taman Selesa Jaya
+area_80000698,Dewan Serbaguna Kg Parit Pasir Baru
+area_80010273,Opp kampung Sepakat
+area_80008747,AEON Dato Onn
+area_80012293,Opp Taman Putri Persiaran Sri Putri 3(2)
+area_80008612,Warung Abadi
+area_80004191,Petron Pandan
+area_80014163,Stadium Pasir Gudang
+area_80004239,Masjid Al Muhamadi Kampung Pekajang
+area_80011336,SJK KUO KUANG
+area_80011298,Wisma Peladang
+area_80011287,MENARA MSC CYBERPORT
+area_80004382,Medan Selera Taman Sri Pulai 1
+area_80004390,Opp Taman Cendana Blok 34
+area_80014142,Jalan Merak 4 Taman Scientex
+area_80002911,Persiaran Laksamana
+area_80011312,Opp Simpang Jalan Sutera
+area_80011295,Taman Setia Indah
+area_80011518,Opp Sekolah Islam At-Tahfiz Taman Mawar
+area_80003030,Hospital Columbia 
+area_80000432,Opp MCDONALDS TUN AMINAH / KEDAI BUAH
+area_80003031,Taman Ria Plentong
+area_80008488,Nusa Sentral 2 B. Stop
+area_80011787,Jalan Permas 3
+area_80004492,Kuil Sri Maha Mariamman
+area_80013300,Opp CIMB Southkey
+area_80006530,Opp TAMAN MUTIARA (SMK TAN SRI OTHMAN MO
+area_80007740,Opp Hostel Kilang
+area_80008480,Opp Hutan Bandar MPJBT
+area_80012245,Opp Taman Scientex Senai
+area_80014183,Simpang Jalan Pulasan 3
+area_80000684,OPP Taman Desa Molek
+area_80014157,Kolej Komuniti Pasir Gudang
+area_80004375,Simpang Jalan Penyiaran 51
+area_80013334,Taman Pulai Mutiara 3
+area_80011327,PERSIARAN INDAH UTAMA
+area_80000629,Hutan Bandar MPJBT
+area_80011524,Opp Taman Desa Skudai
+area_80014134,Jalan Permas 17/1
+area_80012175,Opp Gereja Bethany
+area_80011673,Pertiwi Sejagat
+area_80012244,Taman Scientex Senai
+area_80013342,Nusa Idaman
+area_80011289,Masjid Kampung Kangkar Tebrau
+area_80011573,AEON Taman Universiti
+area_80014078,Perjiranan 8 Dato Onn
+area_80004358,SMK Skudai
+area_80003026,Petron Pasir Gudang East
+area_80003188,Beletime / OPP M-Suites
+area_80012295,Opp Taman Putri Persiaran Sri Putri 3(3)
+area_80002931,Jalan Padi Mahsuri 11
+area_80014197,Jalan Delima
+area_80008198,Opp Kawasan Perindustrian Jalan Johor
+area_80006532,OPP SIMPANG PARIT HAJI OTHMAN
+area_80004215,Kampung Tiram Duku
+area_80003209,OPP Taman Desa Jaya
+area_80011551,Flat Kangkar Pulai (3)
+area_80007723,Puteri Harbour Ferry Terminal
+area_80012167,Opp Shell Tebrau
+area_80005515,ZY Motorsport
+area_80008602,DEWAN JKR JOHOR BAHRU
+area_80004322,U MALL
+area_80004272,Kampung Pok Besar
+area_80011565,GIAT MARA
+area_80000713,SK Pengkalan Raja
+area_80007709,Opp Taman Molek
+area_80007762,Econsave Taman Putri
+area_80004440,Jalan Makmur 15
+area_80011666,Opp BSN Pekan Nenas
+area_80008545,Maybank Taman Nusantara
+area_80002996,Flat Jalan Nipah 11
+area_80014176,Opp Meridin Bayvue
+area_80013280,Opp Sekolah Kebangsaan IJ Convent
+area_80000651,Masjid Hjh. Mominbi Ahmad Angullia
+area_80004217,Dewan Serbaguna Taman Cendana 2
+area_80000377,Caltex Taman Perling
+area_80003143,Indahpura Iris Park
+area_80000674,Econsave Pontian
+area_80011528,Opp Perumahan Staf UTM Desa Skudai
+area_80003207,OPP Kipmart Tampoi
+area_80011778,Medan Selera Stulang Walk
+area_80003204,Kawasan Perindustrian Jalan Johor
+area_80014086,Southkey Park & Ride
+area_80008455,Opp SK Taman Damai Jaya
+area_80014179,COURTs Southkey
+area_80014172,Jalan Sierra Perdana 1/12
+area_80014140,Jalan Merbah 2 Taman Scientex
+area_80008435,Prima Regency 2
+area_80010256,Opp Jalan Sri Putri 1/15
+area_80014218,Lotus Kota Masai 2
+area_80002928,Jalan Dato Esa
+area_80014138,Opp Masjid Pasir Pelangi
+area_80010317,SImpang Jalan Kemuliaan 9
+area_80014102,MPC Bndar Baru Uda
+area_80000416,Opp KFC TUTA /FARMASI PERENNIAL
+area_80011663,Kampung Kangkar Pulai
+area_80000375,Perling Apartment
+area_80004491,Opp Hentian Bas Taman Sri Saujana
+area_80000470,Petronas Bkt Indah Persiaran Indah Utama
+area_80004172,Opp Hospital Sultanah Aminah
+area_80003001,Opp Gerai Muafakat Johor
+area_80000293,Terminal Kulai
+area_80014096,Opp MBSB Mid Valley
+area_80014145,Opp Jalan Kenari 15 Taman Scientex
+area_80013271,Mydin Taman Rinting 2
+area_80014081,Surau Hajjah Fatimah
+area_80004278,SK Murni Pok
+area_80002875,SMK Dato Penggawa Timur
+area_80010310,Taman Pulai Flora
+area_80010072,PPR Setia Indah
+area_80014199,Jalan Nanas 20/7
+area_80003203,Ladang Tai Tak
+area_80004203,Kilang Nishinihon
+area_80004336,Taman Pulai Indah (2)
+area_80000688,Kampung Parit Selangor
+area_80008598,Opp SMK Bandar Baru Uda
+area_80014144,Opp Jalan Kenari 8 Taman Scientex
+area_80010127,Pangsapuri Permas Jaya Zon 1
+area_80014132,Jalan Permas 13/1
+area_80007700,Restoran Pekin Johor Jaya
+area_80014077,Opp Pangsapuri Kasturi
+area_80007619,Opp Stadium Larkin
+area_80004296,Kampung Ladang 
+area_80004277,Al Ikhsan Taman U
+area_80004325,Taman Teratai 1
+area_80012298,Opp Perumahan Flat Cengal
+area_80014155,Simpang Nuri Utama
+area_80003198,Opp Taman Gunung Emas
+area_80000294,Terminal Pontian
+area_80003128,Opp Taman Putri Persiaran Sri Putri 3(1)
+area_80012266,Jejantas Datin Halimah
+area_80011309,Simpang Jalan Belibis
+area_80013339,Pangsapuri Pulai Mutiara 2
+area_80007691,Masjid Taman Perling
+area_80011668,Medan Selera
+area_80014215,Opp U - Sentral Masai
+area_80004377,Kelab Sukan dan Rekreasi Taman Universit
+area_80000715,Opp Masjid Kampung Pengkalan Raja
+area_80003092,OPP Sepakat Jaya
+area_80004334,Opp SK Kangkar Pulai 2
+area_80011352,OPP MASJID KG MELAYU LIMA KEDAI
+area_80011297,Opp Taman Setia Indah
+area_80011506,Taman Cendana Blok 34
+area_80008541,Orchid Valley
+area_80011281,Puteri Harbour
+area_80007784, Opp Jejantas Kampung Melayu
+area_80008630,Shell TUTA
+area_80011321,Opp PERSIARAN INDAH (1)
+area_80004321,Opp Pangsapuri Meranti
+area_80014076,Pintu Gerbang Bandar Dato' Onn
+area_80012157,Wisma Persekutuan
+area_80014075,Opp Pintu Gerbang Bandar Dato' Onn
+area_80000710,Opp GIATMARA TG Piai
+area_80003027,Mutiara Motors
+area_80003088,Kuarters PUB
+area_80000404,Indah Court Apartment
+area_80010305,Opp Petronas Taman Sri Saujana
+area_80008418,Terminal Bas Pasir Gudang
+area_80000696,Desa Sri Aman
+area_80012283,F&N
+area_80014208,Jalan Canngung 6
+area_80011329,JALAN INDAH 2/1 - 2/11
+area_80011284,MPKU
+area_80011502,SMK Pasir Gudang
+area_80004275,OPP Pertubuhan Peladang 
+area_80004425,SK Taman Damai Jaya
+area_80004317,Opp Masjid Tan Sri Ainuddin
+area_80014148,Jalan Kenari Taman Scientex
+area_80011338,JALAN SKUDAI-GELANG PATAH / LOTUS MUTIAR
+area_80002999,Bus Stop TM Auto Tyre
+area_80007594,Opp Mcdonalds Taman Sutera
+area_80011370,Opp Tampoi Indah
+area_80003059,OPP Hospital Columbia 
+area_80003159,Kompleks Pekan Rabu
+area_80003122,Medan Selera Kulai
+area_80000609,Petronas Bukit Indah
+area_80013298,Opp Wisma Daiman
+area_80013285,Hostel Jalan Firma 3
+area_80004395,Petron Jalan Sri Pulai
+area_80011517,Opp Sri Plentong
+area_80003037,Pasir Pelangi
+area_80007739,Hostel Kilang
+area_80000469,Opp Petronas Bkt Indah 1
+area_80011346,OPP BALAI POLIS GELANG PATAH
+area_80011359,PETRONAS NUSA PERINTIS
+area_80008546,Opp Maybank Taman Nusantara
+area_80007782,Jejantas Kampung Ubi
+area_80012240,Opp UTM Skudai
+area_80000631,Opp Rumah Rakyat Iskandar
+area_80013341,Opp Taman Pulai Indah (2)
+area_80000402,Bus Stop Petron Bukit Indah
+area_80014141,Jalan Kenari 3 Taman Scientex
+area_80008436,Opp Prima Regency 2
+area_80012279,Opp Paragon Market Place
+area_80008573,Opp Desa Perwira
+area_80011285,Opp MPKU
+area_80011348,OPP 68 AVENUE
+area_80003211,OPP Kuil Arulmigu Sri Muniswarar
+area_80014166,Lebuhraya Pasir Gudang 1
+area_80012296,Taman Putri Persiaran Sri Putri 3(3)
+area_80011775,Sekolah Agama Dato Onn
+area_80011523,Taman Desa Skudai
+area_80014216,Opp SJK C Pei Hwa / Masjid Taman Perling
+area_80003125,OPP Shell Kulai
+area_80006531,TAMAN MUTIARA (SMK TAN SRI OTHMAN MOHD S
+area_80008584,Surau Al Hidayah
+area_80004199,Terminal Taman Universiti
+area_80011515,JNT Taman Masai Utama
+area_80003137,Jejantas Taman Sri Kulai
+area_80004369,SImpang Jalan Kemuliaan 21
+area_80000418,Opp Shell TUTA
+area_80002933,Tune Hotel
+area_80010282,FLAT KANGKAR PULAI (1)
+area_80014195,SMK Kota Masai 2
+area_80003049,OPP Plaza Pelangi
+area_80012171,Opp Kuil Sri Maha Mariamman
+area_80006524,Taman Impian Indah
+area_80000457,Opp PERUMAHAN RAKYAT LIMA KEDAI
+area_80008572,Opp Todays Market (Jalan Masai Lama)
+area_80003195,SK Kampung Pasir / OPP Giant Tampoi
+area_80007852,GP Sentral
+area_80006537,Shell Tun Aminah
+area_80003021,OPP Majidee
+area_80014188,Opp Jalan Nanas 1
+area_80002995,Jalan Rumbia 39 2
+area_80003003,Bus Stop TNB Taman Daya
+area_80000461,JALAN BESTARI
+area_80013336,Taman Pulai Mutiara 5
+area_80012177,Opp Taman Sri Lalang
+area_80012156,Menara TH
+area_80008583,Dewan Serbaguna Permas Jaya
+area_80003184,OPP Pusat Islam Negeri Johor
+area_80008194,OPP Shell Pandan
+area_80004371,Jalan Penyiaran
+area_80004211,Kampung Bukit Kecil
+area_80003136,Shell Kulai
+area_80012271,Opp BHP Tampoi
+area_80007581,Petronas Tampoi Utama
+area_80010094,Teega Suits
+area_80010284,Opp Simpang Empat Bandar Pulai Jaya
+area_80000606,Opp SK Taman Perling 3
+area_80003186,Perhentian Bas dan Kereta Sewa Ulu Tiram
+area_80014198,Simpang Jalan Persiaran Cermai
+area_80014136,Jalan Permas 15/2
+area_80013327,Opp Masjid Taman Pulai Indah
+area_80006533,SIMPANG PARIT HAJI OTHMAN
+area_80011306,SK TAMAN PERLING
+area_80010093,Fraser Place
+area_80010304,Petronas Taman Sri Saujana
+area_80013301,CIMB Southkey
+area_80003210,OPP Taman Desa Cemerlang
+area_80013345,Opp Ramada
+area_80003050,Opp Shell Taman Iskandar
+area_80011151,Jalan Masai Lama 1
+area_80000412,OPP Petron TUTA
+area_80000443,SEKOLAH AGAMA TUTA
+area_80003114,OPP 7-Eleven Saleng
+area_80011159,Taman Bunga Ros
+area_80008557,AEON (MAIN) Permas Jaya
+area_80000302,Terminal Gelang Patah
+area_80014137,Opp Pangsapuri Pasir Pelangi
+area_80004212,Kampung Paya Mengkuang
+area_80000388,Opp AmBank Bukit Indah
+area_80011314,Opp Dewan Raya Taman Perling
+area_80011315,Shell Taman Perling
+area_80004363,Masjid Tan Sri Ainuddin Taman U
+area_80011355,PANGSAPURI JASA
+area_80002935,Kampong Pasir
+area_80000699,HENTIAN BAS JALAN BESAR
+area_80008055,Lot 10
+area_80010272,Kampung Sepakat
+area_80000641,Restoran 777
+area_80011310,Opp Simpang Jalan Belibis 
+area_80014153,Kuarters Guru Taman Scientex
+area_80014209, opp Jalan Canngung 6
+area_80013343,Opp Medini Hub
+area_80003156,7-Eleven Saleng
+area_80004231,Opp SK Tiram Duku
+area_80008192,OPP Kondo Datin Halimah
+area_80011547,Jalan Pulai Bestari 22(1)
+area_80004370,Surau Al Falah Taman U
+area_80006528,Taman Desa Molek
+area_80002869,Opp Vista Seri Alam
+area_80003091,Taman Teknologi
+area_80008754,Opp AEON Bukit Indah
+area_80014158,Opp Kolej Komuniti Pasir Gudang
+area_80004399,Opp Petronas Kangkar Pulai
+area_80011665,Taman Perindustrian Pekan Nenas
+area_80003076,Opp Taman Bunga Ros
+area_80000374,Opp Perling Apartment
+area_80003042,IPK Johor
+area_80011793,Jalan Permas 9/17
+area_80012173,Opp Pasar Borong Kota Tinggi
+area_80007760,OPP Ladang Tai Tak
+area_80004414,Simpang Empat Bandar Pulai Jaya
+area_80014149,Flat Pelanduk
+area_80013277,Opp Johor Tourist Information Center
+area_80002862,Jalan Tasek 20
+area_80003162,Pejabat LLM
+area_80003120,OPP Indahpura Iris Park
+area_80014192,Rakyat Grocer / Dewan Serbaguna
+area_80008640,Taman Pulai Indah (1 )
+area_80012300,Simpang Jalan Penyiaran 9
+area_80003189,Danga Bay
+area_80011648,Opp Horizon Hills
+area_80012242,Masjid Jamek Bandar Senai
+area_80003111,OPP Caltex Saleng
+area_80014190,Opp Jalan Nanas 13
+area_80011340,STADIUM SULTAN IBRAHIM
+area_80002997,Bus Stop Opp Shell Jalan Daya
+area_80007675,Opp Taman Timur
+area_80013344,Ramada
+area_80011556,Opp Taman D Utama
+area_80013294,Toppen Tebrau
+area_80002888,Opp Selera Kampung Melayu
+area_80011548,Opp JALAN PULAI BESTARI 22 (2)
+area_80012267,Opp Jejantas Datin Halimah
+area_80012241,Opp Taman Teknologi
+area_80003202,Hentian Bas Taman Sri Saujana
+area_80008571,Kg Bakar Batu
+area_80014170,KRT Sierra Perdana
+area_80000297,Hab Sutera Mall
+area_80013281,Opp Pusat Khidmat Pelanggan TNB JB
+area_80014080,Opp Poliklinik Penawar Taman Istimewa
+area_80007570,TAMAN NUSA BESTARI 3
+area_80014150,Opp Flat Pelanduk
+area_80008632,Pasaraya Everjoy
+area_80011322,PERSIARAN INDAH (2)
+area_80014211,Opp E&Y Nazir
+area_80012285,Opp MSU Jalan Tampoi
+area_80011522,Opp Skudai Parade
+area_80000450,Opp 7 ELEVEN SRI ORKID
+area_80014087,Opp Taman Sentosa Jalan Bakar Batu
+area_80013284,Kilang Bika
+area_80011658,Horizon Hills
+area_80006523,KILANG JCS
+area_80000371,SJK C Pei Hwa / Masjid Taman Perling
+area_80008806,SOGO Mid Valley
+area_80003172,OPP Shell Bakawali
+area_80010283,Opp SRI PULAI PERDANA 2 (1)
+area_80008080,Petronas Selesa Jaya
+area_80000679,OPP Taman Impian Indah
+area_80011499,OPP JNT Taman Masai Utama
+area_80011529,SMK Taman Universiti 2
+area_80008566,Opp Shell Jambatan Permas
+area_80008196,IKEA Tebrau Jalan Tebrau
+area_80012273,23 Motorspot
+area_80003121,OPP Public Bank Kulai
+area_80014100,Asrama Putera Jalan Tun Abdul Razak
+area_80004387,Opp SMK Pasir Gudang
+area_80005505,Legoland
+area_80004286,Opp Holiday Plaza
+area_80010287,Opp Petron Taman Sri Pulai
+area_80011328,Opp JALAN INDAH 2/1 - 2/11
+area_80003165,SK Senai
+area_80004258,Opp Saujana Seafood
+area_80004431,Pasaraya Golden Moon
+area_80011349,OPP NUSA SENTRAL 1 B.STOP
+area_80003170,MBIP Skudai
+area_80000660,Petron Pontian
+area_80008298,Apartment Larkin Indah
+area_80012176,Taman Sri Lalang
+area_80012158,Sekolah Kebangsaan IJ Convent
+area_80000690,Bend Weld
+area_80011350,OPP STADIUM SULTAN IBRAHIM
+area_80011500,OPP KPJ Pasir Gudang
+area_80000653,Opp Restoran 777
+area_80000387,Ambank Bukit Indah
+area_80013335,Taman Pulai Mutiara 4
+area_80000632,Rumah Rakyat Iskandar
+area_80011543,Jalan Teratai Taman Teratai
+area_80003208,Terminal Bas Kota Tinggi
+area_80003200,Opp NSK Ulu Tiram
+area_80014210,E&Y Nazir
+area_80003054,Caltex Taman Melodies
+area_80012276,Simpang 4 Kampung Ungku Mohsin
+area_80000708,Hentian Jalan Besar
+area_80007596,Opp Taman Tasek
+area_80013276,Pusat Latihan JPJ Kebun Teh
+area_80012243,Opp Masjid Jamek Bandar Senai
+area_80014088,Taman Sentosa Jalan Bakar Batu
+area_80003043,Foon Yew High School
+area_80010301,Padang Awam MDKT
+area_80000596,Opp JALAN INDAH 1/14 - 1/20
+area_80014146,Jalan Kenari 15 Taman Scientex
+area_80012281,Opp Petron Taman Gembira
+area_80011664,Nature at Work (NURSERY)
+area_80004463,BEST VISION
+area_80000648,TERMINAL TUTA
+area_80002874,Opp SMK Dato Penggawa Timur
+area_80012174,Gereja Bethany
+area_80013282,SJK C NAM HENG
+area_80011303,Opp SK Pengkalan Rinting
+area_80002961,Hentian Setia Indah
+area_80003132,SMK Kota Kulai
+area_80004417,Sri Pulai Perdana (2)
+area_80004401,Dewan Raya Kangkar Pulai
+area_80003163,BSN Senai
+area_80011780,Pangsapuri Pasir Pelangi
+area_80004356,TAMAN SRI SKUDAI
+area_80013337,Taman Pulai Mutiara 6
+area_80003040,OPP Crystal Crown
+area_80003044,Opp Foon Yew High School
+area_80013299,Wisma Daiman
+area_80010112,2N Shop Jalan Hang Jebat
+area_80008481,Jalan Sri Orkid 33
+area_80004253,SK Tanjung Adang
+area_80011344,DOMINOS TAMAN NUSANTARA
+area_80011316,Opp Shell Taman Perling
+area_80008633,28 mart
+area_80011776,Ranhill SAJ Sdn Bhd
+area_80011531,Tadika Nuri
+area_80011794,Jalan Permas 15/1
+area_80012291,Lotus Kulai
+area_80011786,Jalan Permas 1/6
+area_80011323,Opp PERSIARAN INDAH (2)
+area_80011541,Opp Sekolah Agama Taman Sri Pulai
+area_80014191,Opp Simpang Jalan Mangga 13
+area_80000640,Opp BLOK 58
+area_80008037,Kondominium Datin Halimah
+area_80006522,Opp Pekan Nenas
+area_80013333,Taman Pulai Mutiara 2
+area_80014084,Restoran ZZ
+area_80000644,Opp PERSATUAN PENGANUT BUDHA BAO LIAN SI
+area_80003078,Kia Motors Plentong
+area_80004389,Taman Cendana Blok 10
+area_80004252,Pejabat Pos Besar
+area_80013283,Simpang Jalan Firma 3/1
+area_80012287,Al Mizan
+area_80011513,Opp Taman Cendana Blok 10
+area_80007761,Opp Econsave Taman Putri
+area_80008551,Opp Maybank Bandar Seri Alam
+area_80000012,AEON Bukit Indah
+area_80011562,Kampung Pekajang
+area_80004398,Opp Kampung Nesa
+area_80012292,Stadium Kulai
+area_80003160,Caltex Saleng
+area_80008629,KFC TUTA /FARMASI PERENNIAL
+area_80003084,Opp Surau Hajjah Fatimah
+area_80012277,Opp Simpang 4 Kampung Ungku Mohsin
+area_80007617,SJK (C) Foon Yew 3
+area_80000692,Masjid Kampung Pengkalan Raja
+area_80011511,Sekolah Agama Kota Masai
+area_80007765,opp Taman Tiram Jaya
+area_80007758,Pulada
+area_80000434,CALTEX TASEK CENTRAL
+area_80000709,Opp Dewan Serbaguna Kg Parit Pasir Baru
+area_80011542,Jalan Palas 5 Taman Teratai
+area_80011158,OPP Kia Motors Plentong
+area_80011357,OPP DEWAN JKR JOHOR BAHRU
+area_80003115,Pejabat Fama Negeri Johor
+area_80014175,Meridin Bayvue
+area_80011302,SK Pengkalan Rinting
+area_80010128,Masjid Permas 8
+area_80004183,Plaza Pelangi
+area_80013279,Opp Wisma Persekutuan
+area_80003048,Shell Taman Iskandar
+area_80012290,Opp Lotus Kulai
+area_80011520,Opp Taman Ria Plentong
+area_80012302,Opp Perpustakaan Awam Taman Universiti
+area_80008542,PULAI HIJAUAN
+area_80011545,Opp Pasaraya Songmart SriPulai Perdana 2
+area_80003089,UTM Skudai
+area_80007766,Taman Tiram Jaya
+area_80012272,Opp 23 Motorspot
+area_80011353,OPP JALAN SKUDAI-GELANG PATAH / LOTUS MU
+area_80011337,TAMAN PERMAINAN TAMAN SRI ORKID
+area_80012269,Opp Pejabat Fama Negeri Johor
+area_80014185,Simpang Jalan Pulasan 15
+area_80008565,Shell Jambatan Permas
+area_80013286,JCY Jalan Firma 3
+area_80006538,PERSATUAN PENGANUT BUDHA BAO LIAN SI
+area_80003142,Public Bank Kulai
+area_80004354,Opp AEON Taman Universiti
+area_80008489,OPP Nusa Sentral 2 Bus Stop
+area_80007786,Shell Taman Gembira
+area_80011788,Pasar Mini Jin Seng
+area_80014173,Jalan Sierra Perdana 3/18
+area_80011311,Simpang Jalan Sutera
+area_80000716,OPP Bend Weld
+area_80004260,Saujana Seafood
+area_80011746,Terminal Bas Masai 2
+area_80003015,OPP Petron Pandan
+area_80014156,Opp Simpang Nuri Utama
+area_80011791,AEON (Parking)
+area_80011342,68 AVENUE
+area_80014085,Restoran Yasin
+area_80004298,Kampung Ladang 2
+area_80008637,Opp MBIP Skudai
+area_80011332,Opp Tune Hotel
+area_80003095,Hab Pekan Senai
+area_80000446,SJK (T) TUTA
+area_80011544,Opp Sri Pulai Perdana (2)
+area_80014131,GIATMARA Pasir Gudang
+area_80003029,Sri Plentong
+area_80000459,Opp Surau Nur Hidayah
+area_80004256,Opp Jalan Tun Abdul Razak
+area_80011774,Taman Dato Onn
+area_80003000,Hankook Tyre
+area_80008617,Flat Jalan Bertam 1
+area_80011301,Opp Klinik Kesihatan Tampoi
+area_80008636,Opp SMK Skudai
+area_80012288,Opp Taman Kota Kulai
+area_80013329,Opp Persiaran Pulai Mutiara 1
+area_80011498,Kampung Baru Masai
+area_80000520,Opp Petronas Nusa Perintis
+area_80003047,Flat Sri Stulang
+area_80000430,Opp TAN FURNITURE
+area_80007598,Opp Burger King
+area_80011519,Opp Jalan Bayu 11 (Caltex)
+area_80004292,SK TG Kupang
+area_80013293,Bank Muamalat Kebun Teh
+area_80011662,Bandar Baru Kangkar Pulai
+area_80004416,Opp SRI PULAI PERDANA (1)
+area_80007696,Prima Regency 1
+area_80003056,OPP Taman Sentosa
+area_80011660,Opp Petronas Pulai Perdana 2
+area_80013310,Opp Beside Todays Market Jalan Suria
+area_80011784,Jalan Permas 8/1
+area_80008641,Opp Pejabat Pos Skudai
+area_80000410,Mcdonalds Taman Sutera
+area_80011294,Tadika Mutiara Taman Daya
+area_80014207,Masjid Taman Pasir Putih
+area_80003064,Restoran Aliff
+area_80011296,Opp Hankook Tyre
+area_80008477,Opp TAMAN SRI SKUDAI
+area_80011088,Smart Pandan
+area_80011300,Klinik Kesihatan Tampoi
+area_80004281,KSL City
+area_80004365,SK Taman Universiti 4
+area_80003116,Kolej Vokasional ERT Azizah
+area_80002860,Jalan Tasek 10
+area_80010286,Sekolah Agama Taman Sri Pulai
+area_80007787,Opp Shell Taman Gembira
+area_80003213,Taman Dato Chellam
+area_80004347,SK Taman Universiti 3
+area_80000431,TAN FURNITURE
+area_80011661,Petronas Pulai Perdana 2
+area_80003014,OPP Pasar Borong Pandan
+area_80014204,Sampan Shellout
+area_80014178,Opp Cahaya Kota Puteri 1
+area_80012270,BHP Tampoi
+area_80011534,Opp Taman Awam MBIP Taman U
+area_80007781,Opp Jejantas Kampung Ubi
+area_80013323,Lotus Kota Masai
+area_80010078,Bus Stop Opp TD Point
+area_80002936,Opp Bandar Baru Uda
+area_80003005,Bus Stop SK Kangkar Tebrau
+area_80012284,MSU Jalan Tampoi
+area_80011674,Opp JKR Pontian
+area_80004229,Opp GIAT MARA
+area_80006535,OPP Mardi Pontian
+area_80011559,Kampung Tanjung Kupang
+area_80011560,Pusat Komuniti Desa Pok
+area_80007569,Opp TAMAN NUSA BESTARI 3
+area_80013288,Simpang Jalan Setia 4/12
+area_80004299,Warung Rosalina Kampung Ladang
+area_80011152,Opp KipMall Masai
+area_80003060,AEON (Side) Permas Jaya
+area_80014169,Padang Bola Balau
+area_80011341,NUSA SENTRAL 1 B.STOP
+area_80007599,Burger King
+area_80011345,OPP DOMINO TAMAN NUSANTARA
+area_80014164,Lebuhraya Pasir Gudang 2
+area_80011292,Jalan Rumbia 39 1
+area_80014147,Opp Jalan Kenari Taman Scientex
+area_80011789,Jalan Permas 4/6
+area_80014167,Opp Lebuhraya Pasir Gudang 1
+area_80007707,Balai Polis Johor Jaya
+area_80003140,OPP Arked Mara 
+area_80011361,BLOK 58
+area_80011782,UNI Klinik
