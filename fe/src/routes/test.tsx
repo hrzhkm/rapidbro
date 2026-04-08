@@ -19,7 +19,7 @@ function RouteComponent() {
             const feed = GtfsRealtime.transit_realtime.FeedMessage.decode(
                 new Uint8Array(buffer)
             )
-            const vehiclePositions = []
+            const vehiclePositions: Array<NonNullable<(typeof feed.entity)[number]['vehicle']>> = []
             feed.entity.forEach((entity) => {
                 if (entity.vehicle) {
                     vehiclePositions.push(entity.vehicle)
@@ -28,7 +28,7 @@ function RouteComponent() {
             console.log(`Total vehicles: ${vehiclePositions.length}`)
             // console.log(vehiclePositions)
             
-            const T789 = vehiclePositions.filter((vehicle) => vehicle.trip.routeId === 'T7890')
+            const T789 = vehiclePositions.filter((vehicle) => vehicle.trip?.routeId === 'T7890')
             console.log(`Total T789 vehicles: ${T789.length}`)
             console.log(T789)
             T789.forEach((vehicle) => {

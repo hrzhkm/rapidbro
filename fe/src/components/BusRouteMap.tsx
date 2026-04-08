@@ -519,7 +519,7 @@ function BusRouteMap({
         trackedStop,
       }).map(([lat, lon]) => leaflet.latLng(lat, lon))
       if (!hasFitBoundsRef.current) {
-        map.fitBounds(boundsLatLngs, {
+        map.fitBounds(leaflet.latLngBounds(boundsLatLngs), {
           ...getFitBoundsOptions(fullScreen),
           animate: false,
         })

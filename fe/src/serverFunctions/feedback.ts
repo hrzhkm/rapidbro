@@ -6,8 +6,9 @@ type SubmitFeedbackInput = {
   region?: string
 }
 
-export const submitFeedback = createServerFn({ method: 'POST' })
-  .handler(async ({ data }: { data: SubmitFeedbackInput }) => {
+export const submitFeedback = createServerFn({ method: 'POST' }).handler(
+  // @ts-expect-error -- data is passed at runtime via { data } but typed as undefined without .validator()
+  async ({ data }: { data: SubmitFeedbackInput }) => {
     const trimmed = (data.message ?? '').trim()
     if (!trimmed) {
       throw new Error('Feedback message cannot be empty.')
@@ -24,4 +25,5 @@ export const submitFeedback = createServerFn({ method: 'POST' })
     })
 
     return { ok: true }
-  })
+  },
+)

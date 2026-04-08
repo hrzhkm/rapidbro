@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { detectRegion } from '@/lib/region'
-import { MOCK_ALOR_SETAR_COORDS, MOCK_KANGAR_COORDS } from '@/lib/geolocation'
+
+const MOCK_KANGAR_COORDS = { latitude: 6.4414, longitude: 100.1986 }
+const MOCK_ALOR_SETAR_COORDS = { latitude: 6.1177, longitude: 100.3621 }
 
 describe('detectRegion', () => {
   it('returns empty string for KL / default area', () => {
