@@ -90,6 +90,7 @@ function App() {
   const nearestStopEtaRef = useRef<BusEta[]>([])
   const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
   const etaGraceStopIdRef = useRef<string | null>(null)
+  const nearestStopIdRef = useRef<string | null>(null)
   const [coords, setCoords] = useState<UserCoords | null>(null)
   const [nearestStop, setNearestStop] = useState<NearestStopResponse | null>(
     null,
@@ -195,6 +196,7 @@ function App() {
 
     const data = (await response.json()) as NearestStopResponse
     setNearestStop(data)
+    nearestStopIdRef.current = data.stop_id
     return data
   }
 
@@ -570,11 +572,19 @@ function App() {
       const prefix = detectRegion(lat, lon)
       setApiRegionPrefix(prefix)
 
+      const previousStopId = nearestStopIdRef.current
       const nearestStopData = await fetchNearestStop(lat, lon, prefix)
-      await Promise.all([
-        fetchEtaToStop(nearestStopData.stop_id, prefix),
-        fetchRoutesForStop(nearestStopData.stop_id, prefix),
-      ])
+      const stopChanged = previousStopId !== nearestStopData.stop_id
+
+      if (preserveCurrentData && !stopChanged) {
+        // Only refresh ETA data — keep selected route intact
+        await fetchEtaToStop(nearestStopData.stop_id, prefix)
+      } else {
+        await Promise.all([
+          fetchEtaToStop(nearestStopData.stop_id, prefix),
+          fetchRoutesForStop(nearestStopData.stop_id, prefix),
+        ])
+      }
       setLastFetchedAt(new Date())
     } catch (error) {
       setErrorMessage(
