@@ -7,7 +7,7 @@ type SubmitFeedbackInput = {
 }
 
 export const submitFeedback = createServerFn({ method: 'POST' })
-  .validator((data: unknown) => {
+  .inputValidator((data: unknown) => {
     if (
       typeof data !== 'object' ||
       data === null ||

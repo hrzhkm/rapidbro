@@ -22,7 +22,7 @@ function sessionConfig() {
 }
 
 export const adminLogin = createServerFn({ method: 'POST' })
-  .validator((data: unknown) => {
+  .inputValidator((data: unknown) => {
     if (
       typeof data !== 'object' ||
       data === null ||
@@ -92,7 +92,7 @@ export const getFeedback = createServerFn({ method: 'GET' }).handler(async () =>
 })
 
 export const deleteFeedback = createServerFn({ method: 'POST' })
-  .validator((data: unknown) => {
+  .inputValidator((data: unknown) => {
     if (
       typeof data !== 'object' ||
       data === null ||
