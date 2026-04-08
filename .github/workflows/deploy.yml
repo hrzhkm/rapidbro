@@ -74,15 +74,25 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           IMAGE_TAG: ${{ github.sha }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
         run: |
           if [ -z "${POSTGRES_PASSWORD}" ]; then
             echo "POSTGRES_PASSWORD secret is not set. Add it in GitHub Actions Secrets."
+            exit 1
+          fi
+          if [ -z "${ADMIN_USERNAME}" ] || [ -z "${ADMIN_PASSWORD}" ] || [ -z "${SESSION_SECRET}" ]; then
+            echo "ADMIN_USERNAME, ADMIN_PASSWORD, or SESSION_SECRET secret is not set. Add them in GitHub Actions Secrets."
             exit 1
           fi
           OWNER_LC=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
           export GHCR_NAMESPACE="ghcr.io/${OWNER_LC}"
           export IMAGE_TAG
           export POSTGRES_PASSWORD
+          export ADMIN_USERNAME
+          export ADMIN_PASSWORD
+          export SESSION_SECRET
           docker compose -f docker-compose.deploy.yml pull
           docker compose -f docker-compose.deploy.yml up -d --remove-orphans
 

@@ -53,6 +53,9 @@ services:
     restart: always
     environment:
       DATABASE_URL: postgres://rapidbro:${POSTGRES_PASSWORD}@postgres:5432/rapidbro
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
