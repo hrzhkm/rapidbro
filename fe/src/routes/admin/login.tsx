@@ -21,7 +21,6 @@ function RouteComponent() {
     try {
       // @ts-expect-error -- data typed as undefined without .validator()
       await adminLogin({ data: { username, password } })
-      sessionStorage.setItem('admin_authenticated', 'true')
       navigate({ to: '/admin/dashboard' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed.')

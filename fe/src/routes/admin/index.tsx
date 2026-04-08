@@ -1,10 +1,10 @@
-import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { checkAdminAuth } from '@/serverFunctions/admin'
 
 export const Route = createFileRoute('/admin/')({
-  component: RouteComponent,
+  beforeLoad: async () => {
+    const isAuth = await checkAdminAuth()
+    throw redirect({ to: isAuth ? '/admin/dashboard' : '/admin/login' })
+  },
+  component: () => null,
 })
-
-function RouteComponent() {
-  const isAuth = typeof window !== 'undefined' && sessionStorage.getItem('admin_authenticated') === 'true'
-  return <Navigate to={isAuth ? '/admin/dashboard' : '/admin/login'} />
-}

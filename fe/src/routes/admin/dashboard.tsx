@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-import { deleteFeedback, getFeedback } from '@/serverFunctions/admin'
+import { createFileRoute, redirect, useNavigate, useRouter } from '@tanstack/react-router'
+import { useState } from 'react'
+import { adminLogout, checkAdminAuth, deleteFeedback, getFeedback } from '@/serverFunctions/admin'
 
 type Feedback = {
   id: number
@@ -10,6 +10,16 @@ type Feedback = {
 }
 
 export const Route = createFileRoute('/admin/dashboard')({
+  beforeLoad: async () => {
+    const isAuth = await checkAdminAuth()
+    if (!isAuth) {
+      throw redirect({ to: '/admin/login' })
+    }
+  },
+  loader: async () => {
+    const data = await getFeedback()
+    return { feedback: data as Feedback[] }
+  },
   component: RouteComponent,
 })
 
@@ -74,30 +84,24 @@ function isThisWeek(date: Date | string) {
   return d >= weekAgo
 }
 
-export default function RouteComponent() {
+function RouteComponent() {
   const navigate = useNavigate()
-  const [feedback, setFeedback] = useState<Feedback[]>([])
-  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  const { feedback: initialFeedback } = Route.useLoaderData()
+  const [feedback, setFeedback] = useState<Feedback[]>(initialFeedback)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [regionFilter, setRegionFilter] = useState<string>('all')
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    const auth = sessionStorage.getItem('admin_authenticated')
-    if (auth !== 'true') {
-      navigate({ to: '/admin/login' })
-      return
-    }
-    loadFeedback()
-  }, [])
-
-  async function loadFeedback() {
-    setLoading(true)
+  async function handleRefresh() {
+    setRefreshing(true)
     try {
+      await router.invalidate()
       const data = await getFeedback()
       setFeedback(data as Feedback[])
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -112,8 +116,8 @@ export default function RouteComponent() {
     }
   }
 
-  function handleLogout() {
-    sessionStorage.removeItem('admin_authenticated')
+  async function handleLogout() {
+    await adminLogout()
     navigate({ to: '/admin/login' })
   }
 
@@ -245,10 +249,11 @@ export default function RouteComponent() {
               ))}
             </select>
             <button
-              onClick={loadFeedback}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition cursor-pointer"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? 'animate-spin' : ''}>
                 <polyline points="23 4 23 10 17 10" />
                 <polyline points="1 20 1 14 7 14" />
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -257,16 +262,8 @@ export default function RouteComponent() {
             </button>
           </div>
 
-          {/* Table */}
-          {loading ? (
-            <div className="flex items-center justify-center py-16 text-slate-400">
-              <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Loading…
-            </div>
-          ) : filtered.length === 0 ? (
+          {/* List */}
+          {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-50">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -311,7 +308,7 @@ export default function RouteComponent() {
           )}
 
           {/* Footer */}
-          {!loading && filtered.length > 0 && (
+          {filtered.length > 0 && (
             <div className="px-4 py-3 border-t border-slate-100 text-xs text-slate-400">
               Showing {filtered.length} of {feedback.length} entries
             </div>
