@@ -5,6 +5,7 @@ import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { MapPanelShell } from '@/components/MapPanelShell'
 import { OnboardingDialog } from '@/components/OnboardingDialog'
+import { UpdateDialog } from '@/components/UpdateDialog'
 import { Button } from '@/components/ui/button'
 import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import { getGeolocationPosition } from '@/lib/geolocation'
@@ -743,6 +744,7 @@ function App() {
   return (
     <>
     <OnboardingDialog />
+    <UpdateDialog />
     <MapPanelShell
       map={mapContent}
       mapOverlay={locationOverlay}
