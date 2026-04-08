@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { MapPin, Bus, Route, MessageSquarePlus, ChevronRight, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -35,6 +35,7 @@ const steps = [
 function OnboardingDialog() {
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -62,6 +63,36 @@ function OnboardingDialog() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open, step, handleClose])
 
+  // Trap focus inside the dialog when open
+  useEffect(() => {
+    if (!open) return
+    const el = dialogRef.current
+    if (!el) return
+    const focusable = el.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    first?.focus()
+
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault()
+          last?.focus()
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault()
+          first?.focus()
+        }
+      }
+    }
+    el.addEventListener('keydown', handleTab)
+    return () => el.removeEventListener('keydown', handleTab)
+  }, [open, step])
+
   if (!open || typeof document === 'undefined') return null
 
   const current = steps[step]
@@ -69,8 +100,15 @@ function OnboardingDialog() {
   const isLast = step === steps.length - 1
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      aria-modal="true"
+      role="dialog"
+      aria-labelledby="onboarding-title"
+      aria-describedby="onboarding-description"
+      ref={dialogRef}
+    >
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" aria-hidden="true" />
 
       <div className="relative z-10 w-full max-w-sm overflow-hidden rounded-3xl border border-amber-200/80 bg-amber-50 shadow-2xl">
         <div className="flex flex-col items-center px-6 pt-8 pb-6 text-center">
@@ -78,10 +116,10 @@ function OnboardingDialog() {
             <Icon className="h-8 w-8 text-amber-700" />
           </div>
 
-          <p className="mt-5 font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-900">
+          <p id="onboarding-title" className="mt-5 font-['Space_Grotesk',_'Avenir_Next',_sans-serif] text-lg font-semibold tracking-tight text-amber-900">
             {current.title}
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          <p id="onboarding-description" className="mt-2 text-sm leading-relaxed text-slate-600">
             {current.description}
           </p>
         </div>

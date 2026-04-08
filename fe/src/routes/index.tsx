@@ -577,7 +577,7 @@ function App() {
       const nearestStopData = await fetchNearestStop(lat, lon, prefix)
       const stopChanged = previousStopId !== nearestStopData.stop_id
 
-      if (preserveCurrentData && !stopChanged) {
+      if (preserveCurrentData && !stopChanged && stopRoutes.length > 0) {
         // Only refresh ETA data — keep selected route intact
         await fetchEtaToStop(nearestStopData.stop_id, prefix)
       } else {

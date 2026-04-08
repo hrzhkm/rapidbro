@@ -77,7 +77,7 @@ function isToday(date: Date | string) {
   return d.toDateString() === now.toDateString()
 }
 
-function isThisWeek(date: Date | string) {
+function isLast7Days(date: Date | string) {
   const d = new Date(date)
   const now = new Date()
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
@@ -108,7 +108,6 @@ function RouteComponent() {
   async function handleDelete(id: number) {
     setDeletingId(id)
     try {
-      // @ts-expect-error -- data typed as undefined without .validator()
       await deleteFeedback({ data: { id } })
       setFeedback((prev) => prev.filter((f) => f.id !== id))
     } finally {
@@ -130,7 +129,7 @@ function RouteComponent() {
   })
 
   const todayCount = feedback.filter((f) => isToday(f.createdAt)).length
-  const weekCount = feedback.filter((f) => isThisWeek(f.createdAt)).length
+  const weekCount = feedback.filter((f) => isLast7Days(f.createdAt)).length
   const regionCount = new Set(feedback.map((f) => f.region).filter(Boolean)).size
 
   return (
@@ -195,7 +194,7 @@ function RouteComponent() {
             }
           />
           <StatCard
-            label="This week"
+            label="Last 7 days"
             value={weekCount}
             color="slate"
             icon={
@@ -284,7 +283,7 @@ function RouteComponent() {
                   <button
                     onClick={() => handleDelete(item.id)}
                     disabled={deletingId === item.id}
-                    className="opacity-0 group-hover:opacity-100 transition shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 disabled:opacity-50 cursor-pointer"
+                    className="transition shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-400 disabled:opacity-50 cursor-pointer"
                     aria-label="Delete feedback"
                   >
                     {deletingId === item.id ? (

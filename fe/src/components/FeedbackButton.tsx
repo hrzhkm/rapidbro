@@ -57,7 +57,6 @@ export function FeedbackButton({ region, className }: FeedbackButtonProps) {
     setErrorText('')
 
     try {
-      // @ts-expect-error -- data is typed as undefined without .validator() but works at runtime
       await submitFeedback({ data: { message: trimmed, region } })
       setStatus('success')
     } catch {

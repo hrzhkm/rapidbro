@@ -5,7 +5,8 @@ import { prisma } from '@/db'
 function sessionConfig() {
   const secret = process.env.SESSION_SECRET
   if (!secret || secret.length < 32) {
-    throw new Error('SESSION_SECRET must be set and at least 32 characters long.')
+    console.error('SERVER CONFIG ERROR: SESSION_SECRET must be set and at least 32 characters long.')
+    throw new Error('Authentication unavailable.')
   }
   return {
     password: secret,
@@ -20,14 +21,25 @@ function sessionConfig() {
   }
 }
 
-export const adminLogin = createServerFn({ method: 'POST' }).handler(
-  // @ts-expect-error -- data is passed at runtime via { data } but typed as undefined without .validator()
-  async ({ data }: { data: { username: string; password: string } }) => {
+export const adminLogin = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => {
+    if (
+      typeof data !== 'object' ||
+      data === null ||
+      typeof (data as Record<string, unknown>).username !== 'string' ||
+      typeof (data as Record<string, unknown>).password !== 'string'
+    ) {
+      throw new Error('Invalid request.')
+    }
+    return data as { username: string; password: string }
+  })
+  .handler(async ({ data }) => {
     const adminUsername = process.env.ADMIN_USERNAME
     const adminPassword = process.env.ADMIN_PASSWORD
 
     if (!adminUsername || !adminPassword) {
-      throw new Error('Admin credentials not configured on server.')
+      console.error('SERVER CONFIG ERROR: ADMIN_USERNAME or ADMIN_PASSWORD not configured.')
+      throw new Error('Authentication unavailable.')
     }
 
     if (data.username !== adminUsername || data.password !== adminPassword) {
@@ -79,9 +91,18 @@ export const getFeedback = createServerFn({ method: 'GET' }).handler(async () =>
   return feedback
 })
 
-export const deleteFeedback = createServerFn({ method: 'POST' }).handler(
-  // @ts-expect-error -- data is passed at runtime via { data } but typed as undefined without .validator()
-  async ({ data }: { data: { id: number } }) => {
+export const deleteFeedback = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => {
+    if (
+      typeof data !== 'object' ||
+      data === null ||
+      typeof (data as Record<string, unknown>).id !== 'number'
+    ) {
+      throw new Error('Invalid request.')
+    }
+    return data as { id: number }
+  })
+  .handler(async ({ data }) => {
     const isAuth = await (async () => {
       try {
         const session = await getSession<{ authenticated: boolean }>(sessionConfig())

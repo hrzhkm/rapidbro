@@ -191,7 +191,8 @@ describe.sequential('service worker tile caching', () => {
 
     expect(responsePromise).toBeDefined()
     const response = await responsePromise
-    expect(await response!.text()).toBe('cached')
+    if (!response) throw new Error('responsePromise resolved to undefined')
+    expect(await response.text()).toBe('cached')
     expect(env.fetchMock).not.toHaveBeenCalled()
   })
 
@@ -216,7 +217,8 @@ describe.sequential('service worker tile caching', () => {
     })
 
     const response = await responsePromise
-    expect(await response!.text()).toBe('network-tile')
+    if (!response) throw new Error('responsePromise resolved to undefined')
+    expect(await response.text()).toBe('network-tile')
     expect(env.fetchMock).toHaveBeenCalledOnce()
 
     const cached = await env.cache.match(new Request(tileUrl))
@@ -259,7 +261,8 @@ describe.sequential('service worker tile caching', () => {
     })
 
     const immediateResponse = await responsePromise
-    expect(await immediateResponse!.text()).toBe('stale-cache')
+    if (!immediateResponse) throw new Error('responsePromise resolved to undefined')
+    expect(await immediateResponse.text()).toBe('stale-cache')
 
     await Promise.all(backgroundJobs)
     expect(env.fetchMock).toHaveBeenCalledOnce()

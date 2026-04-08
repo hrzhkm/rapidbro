@@ -7,6 +7,7 @@ import { submitFeedback } from '@/serverFunctions/feedback'
 import { Send, LoaderCircle, CheckCircle2 } from 'lucide-react'
 
 const UPDATE_KEY = 'rapidbro-update-seen-v2'
+const ONBOARDING_KEY = 'rapidbro-onboarding-seen'
 
 const BAS_MY_CITIES = [
   'Kangar',
@@ -34,7 +35,6 @@ function FeedbackInline({ onClose }: { onClose: () => void }) {
     setStatus('loading')
     setErrorText('')
     try {
-      // @ts-expect-error -- data is typed as undefined without .validator() but works at runtime
       await submitFeedback({ data: { message: trimmed } })
       setStatus('success')
     } catch {
@@ -118,6 +118,9 @@ function UpdateDialog() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    // Don't show update dialog on the same visit as onboarding
+    const onboardingSeen = localStorage.getItem(ONBOARDING_KEY)
+    if (!onboardingSeen) return
     const seen = localStorage.getItem(UPDATE_KEY)
     if (!seen) setOpen(true)
   }, [])

@@ -19,7 +19,6 @@ function RouteComponent() {
     setLoading(true)
     setError('')
     try {
-      // @ts-expect-error -- data typed as undefined without .validator()
       await adminLogin({ data: { username, password } })
       navigate({ to: '/admin/dashboard' })
     } catch (err) {
