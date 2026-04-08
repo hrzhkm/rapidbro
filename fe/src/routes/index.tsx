@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { MapPanelShell } from '@/components/MapPanelShell'
+import { OnboardingDialog } from '@/components/OnboardingDialog'
+import { UpdateDialog } from '@/components/UpdateDialog'
 import { Button } from '@/components/ui/button'
 import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import { getGeolocationPosition } from '@/lib/geolocation'
@@ -89,6 +91,7 @@ function App() {
   const nearestStopEtaRef = useRef<BusEta[]>([])
   const lastNonEmptyEtaAtMsRef = useRef<number | null>(null)
   const etaGraceStopIdRef = useRef<string | null>(null)
+  const nearestStopIdRef = useRef<string | null>(null)
   const [coords, setCoords] = useState<UserCoords | null>(null)
   const [nearestStop, setNearestStop] = useState<NearestStopResponse | null>(
     null,
@@ -194,6 +197,7 @@ function App() {
 
     const data = (await response.json()) as NearestStopResponse
     setNearestStop(data)
+    nearestStopIdRef.current = data.stop_id
     return data
   }
 
@@ -569,11 +573,19 @@ function App() {
       const prefix = detectRegion(lat, lon)
       setApiRegionPrefix(prefix)
 
+      const previousStopId = nearestStopIdRef.current
       const nearestStopData = await fetchNearestStop(lat, lon, prefix)
-      await Promise.all([
-        fetchEtaToStop(nearestStopData.stop_id, prefix),
-        fetchRoutesForStop(nearestStopData.stop_id, prefix),
-      ])
+      const stopChanged = previousStopId !== nearestStopData.stop_id
+
+      if (preserveCurrentData && !stopChanged && stopRoutes.length > 0) {
+        // Only refresh ETA data — keep selected route intact
+        await fetchEtaToStop(nearestStopData.stop_id, prefix)
+      } else {
+        await Promise.all([
+          fetchEtaToStop(nearestStopData.stop_id, prefix),
+          fetchRoutesForStop(nearestStopData.stop_id, prefix),
+        ])
+      }
       setLastFetchedAt(new Date())
     } catch (error) {
       setErrorMessage(
@@ -730,6 +742,9 @@ function App() {
     ) : null
 
   return (
+    <>
+    <OnboardingDialog />
+    <UpdateDialog />
     <MapPanelShell
       map={mapContent}
       mapOverlay={locationOverlay}
@@ -997,5 +1012,6 @@ function App() {
         </section>
       ) : null}
     </MapPanelShell>
+    </>
   )
 }

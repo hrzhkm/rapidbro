@@ -457,17 +457,24 @@ function BusRouteMap({
             const isCurrent = stop.stop_id === currentStopId
             const isTarget = stop.stop_id === targetStopId
 
+            const pinFill = isCurrent
+              ? '#f59e0b'
+              : isTarget
+                ? '#f97316'
+                : '#facc15'
+            const pinStroke = isCurrent || isTarget ? '#78350f' : '#92400e'
+            const pinSize = isCurrent || isTarget ? 32 : 24
+            const pinAnchorY = pinSize
+            const pinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pinSize}" height="${pinSize}" viewBox="0 0 24 24" fill="${pinFill}" stroke="${pinStroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-7.942 10.751-7.942 10.751a.1.1 0 0 1-.117 0S4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3" fill="${pinStroke}" stroke="none"/></svg>`
+
             leaflet
-              .circleMarker([stop.stop_lat, stop.stop_lon], {
-                radius: isCurrent || isTarget ? 8 : 4,
-                color: isCurrent || isTarget ? '#78350f' : '#92400e',
-                weight: isCurrent || isTarget ? 3 : 2,
-                fillColor: isCurrent
-                  ? '#f59e0b'
-                  : isTarget
-                    ? '#f97316'
-                    : '#facc15',
-                fillOpacity: 0.95,
+              .marker([stop.stop_lat, stop.stop_lon], {
+                icon: leaflet.divIcon({
+                  className: '',
+                  html: pinSvg,
+                  iconSize: [pinSize, pinSize],
+                  iconAnchor: [pinSize / 2, pinAnchorY],
+                }),
               })
               .bindTooltip(stop.stop_name)
               .addTo(layerGroup)
@@ -476,13 +483,15 @@ function BusRouteMap({
       }
 
       if (trackedStop) {
+        const trackedPinSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="#f97316" stroke="#7c2d12" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-7.942 10.751-7.942 10.751a.1.1 0 0 1-.117 0S4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3" fill="#7c2d12" stroke="none"/></svg>`
         leaflet
-          .circleMarker([trackedStop.stop_lat, trackedStop.stop_lon], {
-            radius: 9,
-            color: '#7c2d12',
-            weight: 3,
-            fillColor: '#f97316',
-            fillOpacity: 0.96,
+          .marker([trackedStop.stop_lat, trackedStop.stop_lon], {
+            icon: leaflet.divIcon({
+              className: '',
+              html: trackedPinSvg,
+              iconSize: [36, 36],
+              iconAnchor: [18, 36],
+            }),
           })
           .bindTooltip(`${trackedStop.stop_name} (tracked stop)`)
           .addTo(layerGroup)
@@ -510,7 +519,7 @@ function BusRouteMap({
         trackedStop,
       }).map(([lat, lon]) => leaflet.latLng(lat, lon))
       if (!hasFitBoundsRef.current) {
-        map.fitBounds(boundsLatLngs, {
+        map.fitBounds(leaflet.latLngBounds(boundsLatLngs), {
           ...getFitBoundsOptions(fullScreen),
           animate: false,
         })
