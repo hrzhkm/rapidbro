@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { BusRouteMap } from '@/components/BusRouteMap'
 import { BusRouteLine } from '@/components/BusRouteLine'
 import { MapPanelShell } from '@/components/MapPanelShell'
+import { OnboardingDialog } from '@/components/OnboardingDialog'
 import { Button } from '@/components/ui/button'
 import { mergeBusesWithGraceHold } from '@/lib/bus-grace'
 import { getGeolocationPosition } from '@/lib/geolocation'
@@ -730,6 +731,8 @@ function App() {
     ) : null
 
   return (
+    <>
+    <OnboardingDialog />
     <MapPanelShell
       map={mapContent}
       mapOverlay={locationOverlay}
@@ -997,5 +1000,6 @@ function App() {
         </section>
       ) : null}
     </MapPanelShell>
+    </>
   )
 }
